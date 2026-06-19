@@ -1,3 +1,10 @@
 plugins {
   id "java"
 }
+
+dependencies {
+  compileOnly "io.opentelemetry:opentelemetry-sdk:${otelSdkVersion}"
+  compileOnly "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:${otelSdkVersion}"
+  compileOnly "io.opentelemetry.javaagent:opentelemetry-javaagent-extension-api:${otelJavaagentAlphaVersion}"
+  compileOnly "io.opentelemetry.javaagent:opentelemetry-javaagent-tooling:${otelJavaagentAlphaVersion}"
+}

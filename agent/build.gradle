@@ -1,3 +1,133 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
   id "java"
+  id "com.gradleup.shadow"
+}
+
+apply from: "$rootDir/gradle/shadow.gradle"
+
+def relocatePackages = ext.relocatePackages
+
+configurations {
+  bootstrapLibs {
+    canBeResolved = true
+    canBeConsumed = false
+  }
+  javaagentLibs {
+    canBeResolved = true
+    canBeConsumed = false
+  }
+  upstreamAgent {
+    canBeResolved = true
+    canBeConsumed = false
+  }
+}
+
+dependencies {
+  bootstrapLibs project(':bootstrap')
+
+  javaagentLibs(project(':custom')) {
+    transitive = false
+  }
+  javaagentLibs(project(':instrumentation:zio-common-2.1')) {
+    transitive = false
+  }
+  javaagentLibs(project(':instrumentation:zio-2.1')) {
+    transitive = false
+  }
+  javaagentLibs(project(':instrumentation:zio-telemetry-agent-4.0')) {
+    transitive = false
+  }
+
+  upstreamAgent "io.opentelemetry.javaagent:opentelemetry-javaagent:${otelAgentVersion}"
+}
+
+CopySpec isolateClasses(Iterable<File> jars) {
+  return copySpec {
+    jars.forEach {
+      from(zipTree(it)) {
+        into("inst")
+        rename("^(.*)\\.class\$", "\$1.classdata")
+        exclude("^LICENSE\$")
+        exclude("META-INF/INDEX.LIST")
+        exclude("META-INF/*.DSA")
+        exclude("META-INF/*.SF")
+        exclude("META-INF/maven/**")
+        exclude("META-INF/MANIFEST.MF")
+      }
+    }
+  }
+}
+
+tasks {
+  jar {
+    enabled = false
+  }
+
+  task relocateJavaagentLibs(type: ShadowJar) {
+    configurations = [project.configurations.javaagentLibs]
+
+    archiveFileName.set("javaagentLibs-relocated.jar")
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+
+    mergeServiceFiles()
+    filesMatching("META-INF/services/**") {
+      duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    }
+
+    exclude("**/module-info.class")
+    relocatePackages(it)
+
+    dependencies {
+      exclude("io.opentelemetry:opentelemetry-api")
+      exclude("io.opentelemetry:opentelemetry-common")
+      exclude("io.opentelemetry:opentelemetry-context")
+      exclude("io.opentelemetry.semconv:opentelemetry-semconv")
+      exclude("io.opentelemetry.semconv:opentelemetry-semconv-incubating")
+      exclude("io.opentelemetry:opentelemetry-api-incubator")
+    }
+  }
+
+  task isolateJavaagentLibs(type: Copy) {
+    dependsOn(tasks.relocateJavaagentLibs)
+    with isolateClasses(tasks.relocateJavaagentLibs.outputs.files)
+    into(layout.buildDirectory.dir("isolated/javaagentLibs"))
+    doFirst {
+      delete(destinationDir)
+    }
+  }
+
+  shadowJar {
+    configurations = [project.configurations.bootstrapLibs, project.configurations.upstreamAgent]
+
+    dependsOn(tasks.isolateJavaagentLibs)
+    from(tasks.isolateJavaagentLibs.outputs)
+
+    archiveClassifier.set("")
+    archiveFileName.set("zio-opentelemetry-javaagent.jar")
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    mergeServiceFiles("inst/META-INF/services")
+    filesMatching("inst/META-INF/services/**") {
+      duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    }
+
+    exclude("**/module-info.class")
+    relocatePackages(it)
+
+    manifest {
+      attributes.put("Main-Class", "io.opentelemetry.javaagent.OpenTelemetryAgent")
+      attributes.put("Agent-Class", "io.opentelemetry.javaagent.OpenTelemetryAgent")
+      attributes.put("Premain-Class", "io.opentelemetry.javaagent.OpenTelemetryAgent")
+      attributes.put("Can-Redefine-Classes", "true")
+      attributes.put("Can-Retransform-Classes", "true")
+      attributes.put("Implementation-Vendor", "ZIO")
+      attributes.put("Implementation-Version", "zio-${project.version}-otel-${otelAgentVersion}")
+    }
+  }
+
+  assemble {
+    dependsOn(shadowJar)
+  }
 }
