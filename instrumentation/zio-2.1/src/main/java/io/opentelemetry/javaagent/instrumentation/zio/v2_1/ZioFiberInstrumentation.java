@@ -37,7 +37,8 @@ public class ZioFiberInstrumentation implements TypeInstrumentation {
             self.getClass().getMethod("setFiberRef", Class.forName("zio.FiberRef"), Object.class);
         setFiberRef.invoke(self, ZioContextSingleton.contextFiberRef, currentContext);
       } catch (Throwable ignored) {
-        // ZIO internals differ across patch releases. Later validation can retarget FiberRefs.forkAs.
+        // ZIO internals differ across patch releases. Later validation can retarget
+        // FiberRefs.forkAs.
       }
     }
   }

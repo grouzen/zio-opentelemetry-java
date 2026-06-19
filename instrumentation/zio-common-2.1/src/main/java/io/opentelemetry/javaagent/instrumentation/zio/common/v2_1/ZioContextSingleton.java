@@ -1,7 +1,7 @@
 package io.opentelemetry.javaagent.instrumentation.zio.common.v2_1;
 
 import application.io.opentelemetry.context.Context;
-import io.opentelemetry.javaagent.bootstrap.internal.AgentContextStorage;
+import io.opentelemetry.javaagent.instrumentation.opentelemetryapi.context.AgentContextStorage;
 import java.lang.reflect.Method;
 
 public final class ZioContextSingleton {

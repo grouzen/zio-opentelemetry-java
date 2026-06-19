@@ -3,3 +3,10 @@ plugins {
 }
 
 apply from: "$rootDir/gradle/instrumentation.gradle"
+
+dependencies {
+  implementation project(path: ':opentelemetry-api-shaded-for-instrumenting', configuration: 'shadowRuntimeElements')
+  implementation project(':instrumentation:zio-common-2.1')
+  compileOnly files("${System.properties['user.home']}/.ivy2/local/dev.zio/zio-opentelemetry-agent_${scalaVersion}/${zioTelemetryVersion}/jars/zio-opentelemetry-agent_${scalaVersion}.jar")
+  compileOnly "dev.zio:zio_${scalaVersion}:${zioVersion}"
+}
