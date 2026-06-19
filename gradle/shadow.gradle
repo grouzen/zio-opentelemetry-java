@@ -1,0 +1,4 @@
+tasks.withType(com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar).configureEach {
+  relocate "io.opentelemetry", "io.opentelemetry.javaagent.shaded.io.opentelemetry"
+  relocate "application.io.opentelemetry", "io.opentelemetry"
+}

@@ -1,0 +1,26 @@
+pluginManagement {
+  repositories {
+    gradlePluginPortal()
+    mavenCentral()
+  }
+}
+
+dependencyResolutionManagement {
+  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+  repositories {
+    mavenCentral()
+  }
+}
+
+rootProject.name = 'zio-opentelemetry-java'
+
+include ':opentelemetry-api-shaded-for-instrumenting'
+include ':agent'
+include ':bootstrap'
+include ':custom'
+include ':instrumentation:zio-common-2.1'
+include ':instrumentation:zio-2.1'
+include ':instrumentation:zio-telemetry-agent-4.0'
+include ':smoke-tests-images:zio-http'
+include ':smoke-tests'
+include ':testing:agent-for-testing'

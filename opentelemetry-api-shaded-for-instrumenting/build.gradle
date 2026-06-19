@@ -1,0 +1,16 @@
+plugins {
+  id "java"
+  id "com.gradleup.shadow"
+}
+
+dependencies {
+  implementation "io.opentelemetry:opentelemetry-api:${otelSdkVersion}"
+  implementation "io.opentelemetry:opentelemetry-context:${otelSdkVersion}"
+}
+
+shadowJar {
+  relocate("io.opentelemetry", "application.io.opentelemetry") {
+    include "io.opentelemetry.api.**"
+    include "io.opentelemetry.context.**"
+  }
+}

@@ -1,0 +1,11 @@
+plugins {
+  id "java"
+}
+
+apply from: "$rootDir/gradle/instrumentation.gradle"
+
+dependencies {
+  implementation project(':opentelemetry-api-shaded-for-instrumenting')
+  implementation project(':bootstrap')
+  compileOnly "dev.zio:zio_${scalaVersion}:${zioVersion}"
+}
