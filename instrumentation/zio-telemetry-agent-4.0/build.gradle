@@ -1,5 +1,6 @@
 plugins {
   id "java"
+  id "scala"
 }
 
 apply from: "$rootDir/gradle/instrumentation.gradle"
@@ -9,4 +10,37 @@ dependencies {
   implementation project(':instrumentation:zio-common-2.1')
   compileOnly files("${System.properties['user.home']}/.ivy2/local/dev.zio/zio-opentelemetry-agent_${scalaVersion}/${zioTelemetryVersion}/jars/zio-opentelemetry-agent_${scalaVersion}.jar")
   compileOnly "dev.zio:zio_${scalaVersion}:${zioVersion}"
+
+  testImplementation "org.scala-lang:scala-library:${scalaFullVersion}"
+  testImplementation "dev.zio:zio_${scalaVersion}:${zioVersion}"
+  testImplementation "org.junit.jupiter:junit-jupiter-api:5.11.4"
+  testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.11.4"
+  testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.4"
+  testImplementation "io.opentelemetry:opentelemetry-api:${otelSdkVersion}"
+  testImplementation "io.opentelemetry:opentelemetry-context:${otelSdkVersion}"
+  testImplementation files("${System.properties['user.home']}/.ivy2/local/dev.zio/zio-opentelemetry_${scalaVersion}/${zioTelemetryVersion}/jars/zio-opentelemetry_${scalaVersion}.jar")
+  testImplementation files("${System.properties['user.home']}/.ivy2/local/dev.zio/zio-opentelemetry-core_${scalaVersion}/${zioTelemetryVersion}/jars/zio-opentelemetry-core_${scalaVersion}.jar")
+  testImplementation files("${System.properties['user.home']}/.ivy2/local/dev.zio/zio-opentelemetry-agent_${scalaVersion}/${zioTelemetryVersion}/jars/zio-opentelemetry-agent_${scalaVersion}.jar")
+}
+
+tasks.named("test", Test) {
+  dependsOn project(':testing:agent-for-testing').tasks.named('shadowJar')
+  useJUnitPlatform()
+  classpath =
+      classpath -
+      sourceSets.main.output -
+      project(':instrumentation:zio-common-2.1').sourceSets.main.output
+  javaLauncher = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(17)
+  }
+  jvmArgs "-javaagent:${project(':testing:agent-for-testing').tasks.named('shadowJar').get().archiveFile.get().asFile.absolutePath}"
+  jvmArgs "-Dzio.trackFiberContext=true"
+  jvmArgs "-Dotel.javaagent.debug=true"
+  jvmArgs "-Dotel.javaagent.testing.context-leak-detection=true"
+}
+
+tasks.named("compileTestScala", ScalaCompile) {
+  javaLauncher = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(17)
+  }
 }
