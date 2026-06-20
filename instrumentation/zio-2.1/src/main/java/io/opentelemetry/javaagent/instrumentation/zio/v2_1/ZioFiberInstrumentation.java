@@ -3,7 +3,7 @@ package io.opentelemetry.javaagent.instrumentation.zio.v2_1;
 import static net.bytebuddy.matcher.ElementMatchers.isConstructor;
 import static net.bytebuddy.matcher.ElementMatchers.named;
 
-import application.io.opentelemetry.context.Context;
+import io.opentelemetry.context.Context;
 import io.opentelemetry.javaagent.extension.instrumentation.TypeInstrumentation;
 import io.opentelemetry.javaagent.extension.instrumentation.TypeTransformer;
 import io.opentelemetry.javaagent.instrumentation.zio.common.v2_1.ZioContextSingleton;
@@ -31,7 +31,10 @@ public class ZioFiberInstrumentation implements TypeInstrumentation {
 
     @Advice.OnMethodExit(suppress = Throwable.class)
     public static void onExit(@Advice.This Object self) {
-      Context currentContext = Context.current();
+      Context currentContext = ZioContextSingleton.contextThreadLocal.get();
+      if (currentContext == null || currentContext == Context.root()) {
+        currentContext = Context.current();
+      }
       try {
         Method setFiberRef =
             self.getClass().getMethod("setFiberRef", Class.forName("zio.FiberRef"), Object.class);
