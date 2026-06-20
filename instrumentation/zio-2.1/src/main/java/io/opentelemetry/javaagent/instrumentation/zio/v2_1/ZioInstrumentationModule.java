@@ -21,7 +21,20 @@ public class ZioInstrumentationModule extends InstrumentationModule
 
   @Override
   public List<TypeInstrumentation> typeInstrumentations() {
-    return Arrays.asList(new ZioRuntimeInstrumentation(), new ZioFiberInstrumentation());
+    return Arrays.asList(
+        new ZioRuntimeInstrumentation(),
+        new ZioFiberInstrumentation(),
+        new ZioExecutorInstrumentation());
+  }
+
+  @Override
+  public List<String> getAdditionalHelperClassNames() {
+    return Arrays.asList(
+        "io.opentelemetry.javaagent.instrumentation.zio.v2_1.ZioRuntimeInstrumentation$RuntimeAdvice",
+        "io.opentelemetry.javaagent.instrumentation.zio.v2_1.ZioFiberInstrumentation$ConstructorAdvice",
+        "io.opentelemetry.javaagent.instrumentation.zio.v2_1.ZioExecutorInstrumentation$ExecuteAdvice",
+        "io.opentelemetry.javaagent.instrumentation.zio.v2_1.ContextPropagatingRunnable",
+        "io.opentelemetry.javaagent.instrumentation.zio.v2_1.ZioRuntimeInstrumentation$IsUnderFiberContextSupplier");
   }
 
   @Override

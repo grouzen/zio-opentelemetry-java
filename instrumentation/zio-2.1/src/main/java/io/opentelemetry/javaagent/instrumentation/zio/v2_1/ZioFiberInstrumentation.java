@@ -31,11 +31,8 @@ public class ZioFiberInstrumentation implements TypeInstrumentation {
 
     @Advice.OnMethodExit(suppress = Throwable.class)
     public static void onExit(@Advice.This Object self) {
-      Context currentContext = ZioContextSingleton.contextThreadLocal.get();
-      if (currentContext == null || currentContext == Context.root()) {
-        currentContext = Context.current();
-      }
       try {
+        Object currentContext = ZioContextSingleton.toAgentContext(Context.current());
         Method setFiberRef =
             self.getClass().getMethod("setFiberRef", Class.forName("zio.FiberRef"), Object.class);
         setFiberRef.invoke(self, ZioContextSingleton.contextFiberRef, currentContext);
