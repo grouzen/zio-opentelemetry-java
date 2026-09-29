@@ -1,5 +1,9 @@
 # Session Handoff: ZIO Telemetry Bridge / Step 7.2
 
+> Historical snapshot of the prior session. The current otel4s-style attempt
+> is described in [application-context-fiberref-bridge-plan.md](application-context-fiberref-bridge-plan.md).
+> The fallback status below was accurate when this handoff was written.
+
 ## Purpose
 
 This file is a handoff for the next session so we do not repeat the same failed bridge experiments and debugging loops.

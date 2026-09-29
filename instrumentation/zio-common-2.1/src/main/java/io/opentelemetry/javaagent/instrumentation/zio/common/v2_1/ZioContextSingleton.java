@@ -1,10 +1,11 @@
 package io.opentelemetry.javaagent.instrumentation.zio.common.v2_1;
 
+import application.io.opentelemetry.context.Context;
 import java.lang.reflect.Method;
 
 public final class ZioContextSingleton {
 
-  private static final Object agentRootContext;
+  private static final Object applicationRootContext;
 
   public static final Object contextFiberRef;
 
@@ -23,8 +24,7 @@ public final class ZioContextSingleton {
       Object fiberRefUnsafe = fiberRefUnsafeClass.getField("MODULE$").get(null);
       Object fork = fiberRefUnsafeClass.getMethod("make$default$2").invoke(fiberRefUnsafe);
       Object join = fiberRefUnsafeClass.getMethod("make$default$3").invoke(fiberRefUnsafe);
-      agentRootContext =
-          toAgentContext(invokeStaticZeroArg("io.opentelemetry.context.Context", "root"));
+      applicationRootContext = invokeStaticZeroArg("io.opentelemetry.context.Context", "root");
       contextFiberRef =
           fiberRefUnsafeClass
               .getMethod(
@@ -33,7 +33,7 @@ public final class ZioContextSingleton {
                   Class.forName("scala.Function1"),
                   Class.forName("scala.Function2"),
                   unsafeClass)
-              .invoke(fiberRefUnsafe, agentRootContext, fork, join, unsafe);
+              .invoke(fiberRefUnsafe, applicationRootContext, fork, join, unsafe);
 
       contextThreadLocal = createFiberRefThreadLocal(contextFiberRef);
     } catch (Exception e) {
@@ -67,7 +67,8 @@ public final class ZioContextSingleton {
         }
         try {
           Object context =
-              fiber.getClass()
+              fiber
+                  .getClass()
                   .getMethod("getFiberRef", Class.forName("zio.FiberRef"))
                   .invoke(fiber, fiberRef);
           return toAgentContext(context);
@@ -79,16 +80,16 @@ public final class ZioContextSingleton {
       @Override
       public void set(Object value) {
         Object fiber = currentFiber.get();
+        if (fiber == null) {
+          super.set(value);
+          return;
+        }
         try {
-          Object agentContext = toAgentContext(value);
-          if (fiber == null) {
-            super.set(agentContext);
-            return;
-          }
+          Object applicationContext = toApplicationContext(value);
           fiber
               .getClass()
               .getMethod("setFiberRef", Class.forName("zio.FiberRef"), Object.class)
-              .invoke(fiber, fiberRef, agentContext);
+              .invoke(fiber, fiberRef, applicationContext);
         } catch (Exception e) {
           throw new IllegalStateException("Failed to set ZIO FiberRef context", e);
         }
@@ -113,21 +114,39 @@ public final class ZioContextSingleton {
 
       @Override
       protected Object initialValue() {
-        return agentRootContext;
+        return toAgentContextUnchecked(applicationRootContext);
       }
     };
   }
 
+  private static Object toAgentContextUnchecked(Object value) {
+    try {
+      return toAgentContext(value);
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed to bridge OpenTelemetry context", e);
+    }
+  }
+
+  public static Object toApplicationContext(Object value) {
+    if (value == null) {
+      return applicationRootContext;
+    }
+    if (Context.class.isInstance(value)) {
+      return value;
+    }
+    return invokeAgentContextStorage("toApplicationContext", value);
+  }
+
   public static Object toAgentContext(Object value) throws Exception {
     if (value == null) {
-      return agentRootContext;
+      return toAgentContext(applicationRootContext);
     }
     try {
       Method toAgentContext = value.getClass().getDeclaredMethod("toAgentContext");
       toAgentContext.setAccessible(true);
       return toAgentContext.invoke(value);
     } catch (NoSuchMethodException ignored) {
-      if (value.getClass().getName().startsWith("io.opentelemetry.context.")) {
+      if (Context.class.isInstance(value)) {
         return invokeAgentContextStorage("getAgentContext", value);
       }
       return value;

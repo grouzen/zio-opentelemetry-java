@@ -201,9 +201,49 @@ class ZioTelemetryInstrumentationTest {
 
       assertEquals(outer.getSpanContext, observed.before)
       assertEquals(outer.getSpanContext.getTraceId, observed.fiberCurrent.getTraceId)
-      assertEquals(outer.getSpanContext, observed.javaCurrent)
+      assertNotEquals(outer.getSpanContext.getSpanId, observed.fiberCurrent.getSpanId)
+      assertEquals(observed.fiberCurrent, observed.javaCurrent)
       assertEquals(outer.getSpanContext, observed.after)
     }
+
+  @Test
+  def manualSpanIsVisibleToJavaWithoutExplicitBoundary(): Unit = {
+    val observed =
+      runWithTelemetry { (openTelemetry, tracer) =>
+        tracer.span("zio-parent") { _ =>
+          for {
+            scalaCurrent <- currentScalaSpanContext(openTelemetry)
+            javaCurrent <- ZIO.succeed(currentSpanContext)
+          } yield SpanObservation(scalaCurrent, javaCurrent)
+        }
+      }
+
+    assertTrue(observed.parent.isValid)
+    assertEquals(observed.parent, observed.child)
+  }
+
+  @Test
+  def javaScopeIsVisibleToZioWithoutExplicitBoundary(): Unit = {
+    val observed =
+      runWithTelemetry { (openTelemetry, _) =>
+        ZIO.acquireReleaseWith(
+          ZIO.attempt {
+            val span = GlobalOpenTelemetry.getTracer("zio-telemetry-test").spanBuilder("java-parent").startSpan()
+            (span, span.makeCurrent())
+          }
+        ) { case (span, scope) =>
+          ZIO.succeed {
+            scope.close()
+            span.end()
+          }
+        } { case (span, _) =>
+          currentScalaSpanContext(openTelemetry).map(ctx => SpanObservation(span.getSpanContext, ctx))
+        }
+      }
+
+    assertTrue(observed.parent.isValid)
+    assertEquals(observed.parent, observed.child)
+  }
 
   @Test
   def autoinstrumentedCompatibility(): Unit =
@@ -293,12 +333,15 @@ class ZioTelemetryInstrumentationTest {
 
   @Test
   def agentFiberRefIsDetected(): Unit = {
-    val refClassName =
+    val usesAgentRef =
       runWithTelemetry { (openTelemetry, _) =>
-        ZIO.succeed(openTelemetry.unsafe.getCtxStorage.ref.getClass.getName)
+        ZIO.succeed {
+          ZioAgentContext.isAgentAttached &&
+          ZioAgentContext.getAgentFiberRef().exists(_ eq openTelemetry.unsafe.getCtxStorage.ref)
+        }
       }
 
-    assertTrue(refClassName.contains("FiberRef"))
+    assertTrue(usesAgentRef)
   }
 
   @Test

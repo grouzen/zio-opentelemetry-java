@@ -1,5 +1,9 @@
 # Unified FiberRef Bridge Spec
 
+> Historical design record. The current otel4s-style application-context
+> approach is described in [application-context-fiberref-bridge-plan.md](application-context-fiberref-bridge-plan.md).
+> The agent-only slot rule below applied to the previous bridge design.
+
 ## Goal
 
 Define a safe design for sharing OpenTelemetry context across:
