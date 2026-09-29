@@ -30,6 +30,8 @@ public class ZioInstrumentationModule extends InstrumentationModule
   @Override
   public List<String> getAdditionalHelperClassNames() {
     return Arrays.asList(
+        "io.opentelemetry.javaagent.instrumentation.zio.common.v2_1.ZioContextSingleton",
+        "io.opentelemetry.javaagent.instrumentation.zio.common.v2_1.ZioContextSingleton$FiberRefThreadLocal",
         "io.opentelemetry.javaagent.instrumentation.zio.v2_1.ZioRuntimeInstrumentation$RuntimeAdvice",
         "io.opentelemetry.javaagent.instrumentation.zio.v2_1.ZioFiberInstrumentation$ConstructorAdvice",
         "io.opentelemetry.javaagent.instrumentation.zio.v2_1.ZioExecutorInstrumentation$ExecuteAdvice",

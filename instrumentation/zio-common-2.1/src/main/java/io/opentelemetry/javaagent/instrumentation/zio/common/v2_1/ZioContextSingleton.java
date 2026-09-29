@@ -57,66 +57,75 @@ public final class ZioContextSingleton {
     @SuppressWarnings("unchecked")
     ThreadLocal<Object> currentFiber =
         (ThreadLocal<Object>) fiberCompanionClass.getMethod("_currentFiber").invoke(fiberCompanion);
+    return new FiberRefThreadLocal(currentFiber, fiberRef);
+  }
 
-    return new ThreadLocal<Object>() {
-      @Override
-      public Object get() {
-        Object fiber = currentFiber.get();
-        if (fiber == null) {
-          return super.get();
-        }
-        try {
-          Object context =
-              fiber
-                  .getClass()
-                  .getMethod("getFiberRef", Class.forName("zio.FiberRef"))
-                  .invoke(fiber, fiberRef);
-          return toAgentContext(context);
-        } catch (Exception e) {
-          throw new IllegalStateException("Failed to read ZIO FiberRef context", e);
-        }
-      }
+  public static final class FiberRefThreadLocal extends ThreadLocal<Object> {
+    private final ThreadLocal<Object> currentFiber;
+    private final Object fiberRef;
 
-      @Override
-      public void set(Object value) {
-        Object fiber = currentFiber.get();
-        if (fiber == null) {
-          super.set(value);
-          return;
-        }
-        try {
-          Object applicationContext = toApplicationContext(value);
-          fiber
-              .getClass()
-              .getMethod("setFiberRef", Class.forName("zio.FiberRef"), Object.class)
-              .invoke(fiber, fiberRef, applicationContext);
-        } catch (Exception e) {
-          throw new IllegalStateException("Failed to set ZIO FiberRef context", e);
-        }
-      }
+    public FiberRefThreadLocal(ThreadLocal<Object> currentFiber, Object fiberRef) {
+      this.currentFiber = currentFiber;
+      this.fiberRef = fiberRef;
+    }
 
-      @Override
-      public void remove() {
-        Object fiber = currentFiber.get();
-        if (fiber == null) {
-          super.remove();
-          return;
-        }
-        try {
-          fiber
-              .getClass()
-              .getMethod("deleteFiberRef", Class.forName("zio.FiberRef"))
-              .invoke(fiber, fiberRef);
-        } catch (Exception e) {
-          throw new IllegalStateException("Failed to remove ZIO FiberRef context", e);
-        }
+    @Override
+    public Object get() {
+      Object fiber = currentFiber.get();
+      if (fiber == null) {
+        return super.get();
       }
+      try {
+        Object context =
+            fiber
+                .getClass()
+                .getMethod("getFiberRef", Class.forName("zio.FiberRef"))
+                .invoke(fiber, fiberRef);
+        return toAgentContext(context);
+      } catch (Exception e) {
+        throw new IllegalStateException("Failed to read ZIO FiberRef context", e);
+      }
+    }
 
-      @Override
-      protected Object initialValue() {
-        return toAgentContextUnchecked(applicationRootContext);
+    @Override
+    public void set(Object value) {
+      Object fiber = currentFiber.get();
+      if (fiber == null) {
+        super.set(value);
+        return;
       }
-    };
+      try {
+        Object applicationContext = toApplicationContext(value);
+        fiber
+            .getClass()
+            .getMethod("setFiberRef", Class.forName("zio.FiberRef"), Object.class)
+            .invoke(fiber, fiberRef, applicationContext);
+      } catch (Exception e) {
+        throw new IllegalStateException("Failed to set ZIO FiberRef context", e);
+      }
+    }
+
+    @Override
+    public void remove() {
+      Object fiber = currentFiber.get();
+      if (fiber == null) {
+        super.remove();
+        return;
+      }
+      try {
+        fiber
+            .getClass()
+            .getMethod("deleteFiberRef", Class.forName("zio.FiberRef"))
+            .invoke(fiber, fiberRef);
+      } catch (Exception e) {
+        throw new IllegalStateException("Failed to remove ZIO FiberRef context", e);
+      }
+    }
+
+    @Override
+    protected Object initialValue() {
+      return toAgentContextUnchecked(applicationRootContext);
+    }
   }
 
   private static Object toAgentContextUnchecked(Object value) {

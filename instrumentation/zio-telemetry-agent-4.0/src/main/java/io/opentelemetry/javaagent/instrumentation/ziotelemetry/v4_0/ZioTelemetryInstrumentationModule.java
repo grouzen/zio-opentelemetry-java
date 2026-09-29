@@ -6,6 +6,7 @@ import com.google.auto.service.AutoService;
 import io.opentelemetry.javaagent.extension.instrumentation.InstrumentationModule;
 import io.opentelemetry.javaagent.extension.instrumentation.TypeInstrumentation;
 import io.opentelemetry.javaagent.extension.instrumentation.internal.ExperimentalInstrumentationModule;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import net.bytebuddy.matcher.ElementMatcher;
@@ -25,7 +26,9 @@ public class ZioTelemetryInstrumentationModule extends InstrumentationModule
 
   @Override
   public List<String> getAdditionalHelperClassNames() {
-    return Collections.singletonList(
+    return Arrays.asList(
+        "io.opentelemetry.javaagent.instrumentation.zio.common.v2_1.ZioContextSingleton",
+        "io.opentelemetry.javaagent.instrumentation.zio.common.v2_1.ZioContextSingleton$FiberRefThreadLocal",
         "io.opentelemetry.javaagent.instrumentation.ziotelemetry.v4_0.ZioAgentContextInstrumentation$GetAgentFiberRefAdvice");
   }
 

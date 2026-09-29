@@ -35,15 +35,18 @@ the earlier failure modes, but its agent-only slot rule no longer applies.
 3. Assert that the library selected the agent-provided reference. Test context
    visibility in both directions without explicit `autoinstrumented` or
    unmanaged-scope synchronization.
-4. Run core ZIO tests, zio-telemetry tests, the full Gradle test set, formatting
-   checks, and agent assembly. Then add a ZIO HTTP smoke test before treating
-   the design as production-ready.
+4. Run core ZIO tests, zio-telemetry tests, formatting checks, and agent
+   assembly. Run a ZIO HTTP smoke test against the distributable agent before
+   treating the design as production-ready.
 
 ## Current attempt
 
-Steps 1 through 3 are implemented in this worktree. The strengthened tests
+Steps 1 through 4 are implemented in this worktree. The strengthened tests
 cover library-to-Java and Java-to-library visibility without explicit boundary
-helpers. The core and zio-telemetry suites pass (10 and 18 tests respectively),
-and `gradle test :agent:shadowJar` passes. This is integration-test evidence,
-not a complete validation of production packaging or ZIO patch-version
-compatibility. The planned ZIO HTTP smoke test is still missing.
+helpers. The core and zio-telemetry suites pass (10 and 18 tests respectively).
+The ZIO HTTP smoke test builds a container from the locally published
+`zio-telemetry` snapshot, attaches the distributable agent, and confirms that
+the manual span and automatic outgoing HTTP span share the expected trace and
+parent relationship. It also checks propagated `traceparent`, the manual span
+attribute, and distribution resource attributes. Compatibility across other
+ZIO and zio-telemetry versions, and MDC log correlation, remain to be checked.

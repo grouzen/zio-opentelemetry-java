@@ -1,3 +1,27 @@
 plugins {
   id "java"
 }
+
+dependencies {
+  testImplementation 'org.junit.jupiter:junit-jupiter-api:5.11.4'
+  testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.11.4'
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+  testImplementation 'org.testcontainers:testcontainers:2.0.5'
+  testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.19.2'
+  testImplementation 'com.google.protobuf:protobuf-java-util:4.31.1'
+  testImplementation 'io.opentelemetry.proto:opentelemetry-proto:1.9.0-alpha'
+  testImplementation 'io.opentelemetry:opentelemetry-api:1.62.0'
+  testImplementation 'com.squareup.okhttp3:okhttp:4.12.0'
+  testRuntimeOnly 'org.slf4j:slf4j-simple:1.7.36'
+}
+
+tasks.named('test', Test) {
+  useJUnitPlatform()
+  def agentJar = project(':agent').tasks.named('shadowJar')
+  def smokeImage = project(':smoke-tests-images:zio-http').tasks.named('jibDockerBuild')
+  dependsOn(agentJar, smokeImage)
+  inputs.file(agentJar.flatMap { it.archiveFile })
+  doFirst {
+    systemProperty 'zio.smoketest.agent.jar', agentJar.get().archiveFile.get().asFile.absolutePath
+  }
+}

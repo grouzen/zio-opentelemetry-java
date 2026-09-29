@@ -838,6 +838,12 @@ Run: `./gradlew test`
 
 ## Step 8: Smoke Tests
 
+The ZIO HTTP smoke test is implemented in `smoke-tests-images/zio-http` and
+`smoke-tests`. It runs against the assembled agent and a fake OTLP backend.
+It covers context propagation, manual and automatic spans, span attributes,
+and distribution resource attributes. MDC log correlation and the version
+matrix in Step 8.3 are still separate follow-ups.
+
 ### 8.1 Smoke Test App
 
 **File**: `smoke-tests-images/zio-http/src/main/scala/example/Server.scala`
