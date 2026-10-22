@@ -196,13 +196,16 @@ class ZioTelemetryInstrumentationTest {
         runWithTelemetry { (openTelemetry, _) =>
           openTelemetry.autoinstrumented {
             for {
-              value <- ZIO.succeed(currentSpanContext).timeout(Duration.fromSeconds(1))
+              beforeTimeout <- ZIO.succeed(currentSpanContext)
+              duringTimeout <- ZIO.succeed(currentSpanContext).timeout(Duration.fromSeconds(1))
               afterTimeout <- ZIO.succeed(currentSpanContext)
-            } yield value.getOrElse(afterTimeout)
+            } yield (beforeTimeout, duringTimeout, afterTimeout)
           }
         }
 
-      assertEquals(outer.getSpanContext, observed)
+      assertEquals(outer.getSpanContext, observed._1)
+      assertEquals(Some(outer.getSpanContext), observed._2)
+      assertEquals(outer.getSpanContext, observed._3)
     }
 
   @Test
