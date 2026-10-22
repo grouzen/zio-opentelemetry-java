@@ -30,10 +30,19 @@ controlled fiber interleaving, concurrency, sequential fibers, a custom ZIO
 executor, race cleanup, and actual timeout cancellation. Separate tests cover
 context keys, baggage, runtime reentry, and the assembled agent in a ZIO HTTP app.
 
+The `integration-tests:zio-timeout` suite exercises the assembled agent in separate
+JVMs using a small `ZIOApp` based on
+[dontgitit's issue #1069 reproducer](https://github.com/dontgitit/zio-telemetry-issue-1069). With
+`Client.default` present and the upstream ZIO instrumentation disabled, it checks
+both a successful `.timeout` and an expired timeout. Each case compares the Java
+and zio-telemetry trace and span IDs before, inside, and after the timed effect.
+Run it with `gradle :integration-tests:zio-timeout:test` after preparing the pinned
+zio-telemetry fixture.
+
 ## Compatibility matrix
 
-Java 17 is the minimum supported runtime. CI runs the full build and HTTP smoke
-test in all eight combinations:
+Java 17 is the minimum supported runtime. CI runs the full build, timeout
+integration test, and HTTP smoke test in all eight combinations:
 
 | Dimension | Values |
 | --- | --- |

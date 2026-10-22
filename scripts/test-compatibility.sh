@@ -25,7 +25,7 @@ for scala in 2.13 3; do
         failed=1
       fi
       mkdir -p "$results/$lane"
-      for module in instrumentation/zio-2.1 instrumentation/zio-telemetry-agent-4.0 smoke-tests; do
+      for module in instrumentation/zio-2.1 instrumentation/zio-telemetry-agent-4.0 integration-tests/zio-timeout smoke-tests; do
         if [[ -d "$module/build/test-results" ]]; then
           cp -R "$module/build/test-results" "$results/$lane/$(basename "$module")"
         fi
