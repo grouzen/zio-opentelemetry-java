@@ -1,0 +1,42 @@
+plugins {
+  id 'java'
+  id 'scala'
+}
+
+dependencies {
+  implementation scalaLibrary
+  implementation "dev.zio:zio_${scalaVersion}:${zioVersion}"
+  implementation "dev.zio:zio-http_${scalaVersion}:3.7.1"
+  implementation "io.opentelemetry:opentelemetry-api:${otelSdkVersion}"
+  implementation "dev.zio:zio-opentelemetry_${scalaVersion}:${zioTelemetryVersion}"
+  implementation "dev.zio:zio-opentelemetry-core_${scalaVersion}:${zioTelemetryVersion}"
+  implementation "dev.zio:zio-opentelemetry-agent_${scalaVersion}:${zioTelemetryVersion}"
+
+  testImplementation 'org.junit.jupiter:junit-jupiter-api:5.11.4'
+  testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.19.2'
+  testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.11.4'
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+}
+
+tasks.named('compileScala', ScalaCompile) {
+  javaLauncher = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(17)
+  }
+}
+
+tasks.named('test', Test) {
+  useJUnitPlatform()
+  javaLauncher = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(testJavaVersion)
+  }
+  def agentJar = project(':agent').tasks.named('shadowJar')
+  dependsOn(agentJar)
+  inputs.file(agentJar.flatMap { it.archiveFile })
+  doFirst {
+    systemProperty 'zio.timeout.agent.jar', agentJar.get().archiveFile.get().asFile.absolutePath
+    systemProperty 'zio.timeout.app.classpath', sourceSets.main.runtimeClasspath.asPath
+    systemProperty 'zio.timeout.java.executable', javaToolchains.launcherFor {
+      languageVersion = JavaLanguageVersion.of(testJavaVersion)
+    }.get().executablePath.asFile.absolutePath
+  }
+}

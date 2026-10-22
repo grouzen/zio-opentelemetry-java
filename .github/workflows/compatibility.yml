@@ -47,7 +47,7 @@ jobs:
           else
             bash scripts/prepare-zio-telemetry.sh 2.13.18
           fi
-      - name: Run instrumentation suites, packaged agent smoke, and formatting
+      - name: Run instrumentation, integration, smoke, and formatting checks
         run: >-
           gradle clean build spotlessCheck --no-build-cache --no-daemon
           -PscalaVersion=${{ matrix.scala }}
@@ -60,6 +60,8 @@ jobs:
           name: tests-jdk${{ matrix.java }}-scala${{ matrix.scala }}-zio${{ matrix.zio }}
           path: |
             instrumentation/*/build/reports/tests/
+            integration-tests/*/build/reports/tests/
             smoke-tests/build/reports/tests/
             instrumentation/*/build/test-results/
+            integration-tests/*/build/test-results/
             smoke-tests/build/test-results/
