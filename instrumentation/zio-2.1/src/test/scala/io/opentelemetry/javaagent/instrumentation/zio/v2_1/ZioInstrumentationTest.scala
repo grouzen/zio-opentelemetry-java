@@ -79,7 +79,9 @@ class ZioInstrumentationTest {
         runZIO {
           for {
             started <- Promise.make[Nothing, Unit]
-            fiber <- (started.succeed(()) *> ZIO.never).fork
+            fiber <- scopedSpan("interrupted-child") {
+              started.succeed(()) *> ZIO.never
+            }.fork
             _ <- started.await
             _ <- fiber.interrupt
             afterInterrupt <- ZIO.succeed(currentSpanContext)
@@ -90,19 +92,41 @@ class ZioInstrumentationTest {
 
   @Test
   def synchronizedFibersDoNotInterfereWithEachOthersTraces(): Unit = {
-    val first = runIsolatedChild("first")
-    val second = runIsolatedChild("second")
+    val results = runZIO {
+      for {
+        semaphore <- Semaphore.make(1)
+        firstStarted <- Promise.make[Nothing, Unit]
+        releaseFirst <- Promise.make[Nothing, Unit]
+        firstFiber <- semaphore.withPermit(
+          observeInsideNewSpanWithBarrier("first", firstStarted, releaseFirst)
+        ).fork
+        _ <- firstStarted.await
+        secondFiber <- semaphore.withPermit(observeInsideNewSpan("second")).fork
+        _ <- releaseFirst.succeed(())
+        first <- firstFiber.join
+        second <- secondFiber.join
+      } yield List(first, second)
+    }
 
-    assertEquals(first.parent, first.child)
-    assertEquals(second.parent, second.child)
-    assertNotEquals(first.parent.getTraceId, second.parent.getTraceId)
+    results.foreach(result => assertEquals(result.parent, result.child))
+    assertNotEquals(results.head.parent.getTraceId, results(1).parent.getTraceId)
   }
 
   @Test
   def concurrentFibersDoNotInterfereWithEachOthersTraces(): Unit = {
     val results =
       runZIO {
-        ZIO.collectAllPar(List(observeInsideNewSpan("first"), observeInsideNewSpan("second")))
+        for {
+          firstStarted <- Promise.make[Nothing, Unit]
+          secondStarted <- Promise.make[Nothing, Unit]
+          release <- Promise.make[Nothing, Unit]
+          firstFiber <- observeInsideNewSpanWithBarrier("first", firstStarted, release).fork
+          secondFiber <- observeInsideNewSpanWithBarrier("second", secondStarted, release).fork
+          _ <- firstStarted.await.zipPar(secondStarted.await)
+          _ <- release.succeed(())
+          first <- firstFiber.join
+          second <- secondFiber.join
+        } yield List(first, second)
       }
 
     results.foreach { result =>
@@ -116,8 +140,10 @@ class ZioInstrumentationTest {
     val results =
       runZIO {
         for {
-          first <- observeInsideNewSpan("first")
-          second <- observeInsideNewSpan("second")
+          firstFiber <- observeInsideNewSpan("first").fork
+          first <- firstFiber.join
+          secondFiber <- observeInsideNewSpan("second").fork
+          second <- secondFiber.join
         } yield List(first, second)
       }
 
@@ -152,9 +178,6 @@ class ZioInstrumentationTest {
       assertEquals(outer.getSpanContext, observed)
     }
 
-  private def runIsolatedChild(name: String): SpanObservation =
-    runZIO(observeInsideNewSpan(name))
-
   private def observeInsideNewSpan(name: String): ZIO[Any, Throwable, SpanObservation] =
     scopedSpan(name) {
       for {
@@ -162,6 +185,21 @@ class ZioInstrumentationTest {
         fiber <- ZIO.succeed(currentSpanContext).fork
         child <- fiber.join
       } yield SpanObservation(parent, child)
+    }
+
+  private def observeInsideNewSpanWithBarrier(
+    name: String,
+    started: Promise[Nothing, Unit],
+    release: Promise[Nothing, Unit]
+  ): ZIO[Any, Throwable, SpanObservation] =
+    scopedSpan(name) {
+      for {
+        before <- ZIO.succeed(currentSpanContext)
+        _ <- started.succeed(())
+        _ <- release.await
+        _ <- ZIO.yieldNow
+        after <- ZIO.succeed(currentSpanContext)
+      } yield SpanObservation(before, after)
     }
 
   private def scopedSpan[A](name: String)(effect: ZIO[Any, Throwable, A]): ZIO[Any, Throwable, A] =

@@ -18,6 +18,7 @@ dependencies {
   testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.4"
   testImplementation "io.opentelemetry:opentelemetry-api:${otelSdkVersion}"
   testImplementation "io.opentelemetry:opentelemetry-context:${otelSdkVersion}"
+  testImplementation "io.opentelemetry.javaagent:opentelemetry-testing-common:${otelJavaagentAlphaVersion}"
   testImplementation files("${System.properties['user.home']}/.ivy2/local/dev.zio/zio-opentelemetry_${scalaVersion}/${zioTelemetryVersion}/jars/zio-opentelemetry_${scalaVersion}.jar")
   testImplementation files("${System.properties['user.home']}/.ivy2/local/dev.zio/zio-opentelemetry-core_${scalaVersion}/${zioTelemetryVersion}/jars/zio-opentelemetry-core_${scalaVersion}.jar")
   testImplementation files("${System.properties['user.home']}/.ivy2/local/dev.zio/zio-opentelemetry-agent_${scalaVersion}/${zioTelemetryVersion}/jars/zio-opentelemetry-agent_${scalaVersion}.jar")

@@ -2,6 +2,7 @@ package zio.telemetry.opentelemetry.agent
 
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.api.trace.{Span, SpanContext}
+import io.opentelemetry.context.{Context, ContextKey}
 import org.junit.jupiter.api.Assertions.{assertEquals, assertNotEquals, assertTrue}
 import org.junit.jupiter.api.Test
 import zio._
@@ -13,6 +14,8 @@ import java.util.concurrent.Executors
 import scala.concurrent.{ExecutionContext, Future}
 
 class ZioTelemetryInstrumentationTest {
+  private val stringKey: ContextKey[String] = ContextKey.named("zio.bridge.string")
+  private val numberKey: ContextKey[Integer] = ContextKey.named("zio.bridge.number")
 
   @Test
   def respectOuterSpanWithAutoinstrumented(): Unit =
@@ -89,7 +92,9 @@ class ZioTelemetryInstrumentationTest {
             for {
               parent <- ZIO.succeed(currentSpanContext)
               started <- Promise.make[Nothing, Unit]
-              fiber <- (started.succeed(()) *> ZIO.never).fork
+              fiber <- tracer.span("interrupted-child") { _ =>
+                started.succeed(()) *> ZIO.never
+              }.fork
               _ <- started.await
               _ <- fiber.interrupt
               afterInterrupt <- ZIO.succeed(currentSpanContext)
@@ -103,12 +108,25 @@ class ZioTelemetryInstrumentationTest {
 
   @Test
   def synchronizedFibersDoNotInterfereWithEachOthersTraces(): Unit = {
-    val first = runIsolatedChild("first")
-    val second = runIsolatedChild("second")
-
-    assertEquals(first.parent, first.child)
-    assertEquals(second.parent, second.child)
-    assertNotEquals(first.parent.getTraceId, second.parent.getTraceId)
+    val results = runWithTelemetry { (openTelemetry, tracer) =>
+      openTelemetry.autoinstrumented {
+        for {
+          semaphore <- Semaphore.make(1)
+          firstStarted <- Promise.make[Nothing, Unit]
+          releaseFirst <- Promise.make[Nothing, Unit]
+          firstFiber <- semaphore.withPermit(
+            observeInsideNewSpanWithBarrier(openTelemetry, tracer, "first", firstStarted, releaseFirst)
+          ).fork
+          _ <- firstStarted.await
+          secondFiber <- semaphore.withPermit(observeInsideNewSpan(openTelemetry, tracer, "second")).fork
+          _ <- releaseFirst.succeed(())
+          first <- firstFiber.join
+          second <- secondFiber.join
+        } yield List(first, second)
+      }
+    }
+    results.foreach(result => assertEquals(result.parent, result.child))
+    assertNotEquals(results.head.parent.getTraceId, results(1).parent.getTraceId)
   }
 
   @Test
@@ -116,12 +134,17 @@ class ZioTelemetryInstrumentationTest {
     val results =
       runWithTelemetry { (openTelemetry, tracer) =>
         openTelemetry.autoinstrumented {
-          ZIO.collectAllPar(
-            List(
-              observeInsideNewSpan(openTelemetry, tracer, "first"),
-              observeInsideNewSpan(openTelemetry, tracer, "second")
-            )
-          )
+          for {
+            firstStarted <- Promise.make[Nothing, Unit]
+            secondStarted <- Promise.make[Nothing, Unit]
+            release <- Promise.make[Nothing, Unit]
+            firstFiber <- observeInsideNewSpanWithBarrier(openTelemetry, tracer, "first", firstStarted, release).fork
+            secondFiber <- observeInsideNewSpanWithBarrier(openTelemetry, tracer, "second", secondStarted, release).fork
+            _ <- firstStarted.await.zipPar(secondStarted.await)
+            _ <- release.succeed(())
+            first <- firstFiber.join
+            second <- secondFiber.join
+          } yield List(first, second)
         }
       }
 
@@ -137,8 +160,10 @@ class ZioTelemetryInstrumentationTest {
       runWithTelemetry { (openTelemetry, tracer) =>
         openTelemetry.autoinstrumented {
           for {
-            first <- observeInsideNewSpan(openTelemetry, tracer, "first")
-            second <- observeInsideNewSpan(openTelemetry, tracer, "second")
+            firstFiber <- observeInsideNewSpan(openTelemetry, tracer, "first").fork
+            first <- firstFiber.join
+            secondFiber <- observeInsideNewSpan(openTelemetry, tracer, "second").fork
+            second <- secondFiber.join
           } yield List(first, second)
         }
       }
@@ -308,12 +333,136 @@ class ZioTelemetryInstrumentationTest {
     assertNotEquals(observed.before.getSpanId, observed.nested.getSpanId)
   }
 
-  private def runIsolatedChild(name: String): SpanObservation =
-    runWithTelemetry { (openTelemetry, tracer) =>
-      openTelemetry.autoinstrumented {
-        observeInsideNewSpan(openTelemetry, tracer, name)
+  @Test
+  def javaContextKeysAreScopedAndRestored(): Unit = {
+    assertKeys(None, None)
+    withJavaContext(Context.current().`with`(stringKey, "outer")) {
+      assertKeys(Some("outer"), None)
+      withJavaContext(Context.current().`with`(numberKey, Integer.valueOf(2))) {
+        assertKeys(Some("outer"), Some(2))
+        withJavaContext(Context.root()) {
+          assertKeys(None, None)
+        }
+        assertKeys(Some("outer"), Some(2))
+      }
+      assertKeys(Some("outer"), None)
+    }
+    assertKeys(None, None)
+  }
+
+  @Test
+  def fiberContextKeysAreScopedAndRestored(): Unit = {
+    val observations = runWithTelemetry { (openTelemetry, _) =>
+      val storage = openTelemetry.unsafe.getCtxStorage
+      storage.locally(Context.current().`with`(stringKey, "outer")) {
+        for {
+          outer <- observeKeys(openTelemetry)
+          nested <- storage.locally(Context.current().`with`(numberKey, Integer.valueOf(2))) {
+            for {
+              both <- observeKeys(openTelemetry)
+              empty <- storage.locally(Context.root())(observeKeys(openTelemetry))
+              restored <- observeKeys(openTelemetry)
+            } yield List(both, empty, restored)
+          }
+          after <- observeKeys(openTelemetry)
+        } yield outer :: nested ::: List(after)
       }
     }
+    assertEquals(List(KeyObservation(Some("outer"), None), KeyObservation(Some("outer"), Some(2)),
+      KeyObservation(None, None), KeyObservation(Some("outer"), Some(2)),
+      KeyObservation(Some("outer"), None)), observations)
+    assertKeys(None, None)
+  }
+
+  @Test
+  def javaScopeInsideFiberAndFiberScopeInsideJavaPreserveKeys(): Unit = {
+    val fromFiber = runWithTelemetry { (openTelemetry, _) =>
+      val storage = openTelemetry.unsafe.getCtxStorage
+      storage.locally(Context.current().`with`(stringKey, "fiber")) {
+        for {
+          before <- observeKeys(openTelemetry)
+          inside <- ZIO.succeed {
+            withJavaContext(Context.current().`with`(numberKey, Integer.valueOf(2))) {
+              runZIO(observeKeys(openTelemetry))
+            }
+          }
+          after <- observeKeys(openTelemetry)
+        } yield List(before, inside, after)
+      }
+    }
+    assertEquals(List(KeyObservation(Some("fiber"), None), KeyObservation(Some("fiber"), Some(2)),
+      KeyObservation(Some("fiber"), None)), fromFiber)
+
+    withJavaContext(Context.current().`with`(stringKey, "java")) {
+      val fromJava = runWithTelemetry { (openTelemetry, _) =>
+        val storage = openTelemetry.unsafe.getCtxStorage
+        for {
+          before <- observeKeys(openTelemetry)
+          inside <- storage.locally(Context.current().`with`(numberKey, Integer.valueOf(4))) {
+            observeKeys(openTelemetry)
+          }
+          after <- observeKeys(openTelemetry)
+        } yield List(before, inside, after)
+      }
+      assertEquals(List(KeyObservation(Some("java"), None), KeyObservation(Some("java"), Some(4)),
+        KeyObservation(Some("java"), None)), fromJava)
+      assertKeys(Some("java"), None)
+    }
+    assertKeys(None, None)
+  }
+
+  @Test
+  def nestedJavaAndFiberScopesRestoreOverriddenKeys(): Unit = {
+    val observed = runWithTelemetry { (openTelemetry, _) =>
+      val storage = openTelemetry.unsafe.getCtxStorage
+      storage.locally(Context.current().`with`(stringKey, "fiber")) {
+        for {
+          inside <- ZIO.succeed {
+            withJavaContext(Context.current().`with`(numberKey, Integer.valueOf(2))) {
+              withJavaContext(Context.current().`with`(stringKey, "java")) {
+                runZIO {
+                  for {
+                    before <- observeKeys(openTelemetry)
+                    overrideNumber <- storage.locally(Context.current().`with`(numberKey, Integer.valueOf(4))) {
+                      observeKeys(openTelemetry)
+                    }
+                    empty <- storage.locally(Context.root())(observeKeys(openTelemetry))
+                    after <- observeKeys(openTelemetry)
+                  } yield List(before, overrideNumber, empty, after)
+                }
+              }
+            }
+          }
+          afterJava <- observeKeys(openTelemetry)
+        } yield inside :+ afterJava
+      }
+    }
+    assertEquals(List(KeyObservation(Some("java"), Some(2)), KeyObservation(Some("java"), Some(4)),
+      KeyObservation(None, None), KeyObservation(Some("java"), Some(2)),
+      KeyObservation(Some("fiber"), None)), observed)
+    assertKeys(None, None)
+  }
+
+  private def observeKeys(openTelemetry: CoreOpenTelemetry): ZIO[Any, Nothing, KeyObservation] =
+    openTelemetry.unsafe.getCurrentContext.map { fiberContext =>
+      val javaContext = Context.current()
+      val fiberKeys = keys(fiberContext)
+      val javaKeys = keys(javaContext)
+      assertEquals(fiberKeys, javaKeys)
+      fiberKeys
+    }
+
+  private def keys(context: Context): KeyObservation =
+    KeyObservation(Option(context.get(stringKey)), Option(context.get(numberKey)).map(_.intValue()))
+
+  private def assertKeys(string: Option[String], number: Option[Int]): Unit =
+    assertEquals(KeyObservation(string, number), keys(Context.current()))
+
+  private def withJavaContext[A](context: Context)(body: => A): A = {
+    val scope = context.makeCurrent()
+    try body
+    finally scope.close()
+  }
 
   private def observeInsideNewSpan(
     openTelemetry: CoreOpenTelemetry,
@@ -326,6 +475,23 @@ class ZioTelemetryInstrumentationTest {
         fiber <- currentScalaSpanContext(openTelemetry).fork
         child <- fiber.join
       } yield SpanObservation(parent, child)
+    }
+
+  private def observeInsideNewSpanWithBarrier(
+    openTelemetry: CoreOpenTelemetry,
+    tracer: Tracer,
+    name: String,
+    started: Promise[Nothing, Unit],
+    release: Promise[Nothing, Unit]
+  ): ZIO[Any, Throwable, SpanObservation] =
+    tracer.span(name) { _ =>
+      for {
+        before <- currentScalaSpanContext(openTelemetry)
+        _ <- started.succeed(())
+        _ <- release.await
+        _ <- ZIO.yieldNow
+        after <- currentScalaSpanContext(openTelemetry)
+      } yield SpanObservation(before, after)
     }
 
   private def currentScalaSpanContext(openTelemetry: CoreOpenTelemetry): ZIO[Any, Nothing, SpanContext] =
@@ -400,4 +566,5 @@ class ZioTelemetryInstrumentationTest {
     after: SpanContext
   )
   private final case class NestedObservation(before: SpanContext, nested: SpanContext, after: SpanContext)
+  private final case class KeyObservation(string: Option[String], number: Option[Int])
 }

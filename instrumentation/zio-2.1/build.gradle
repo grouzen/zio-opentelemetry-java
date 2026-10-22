@@ -20,6 +20,7 @@ dependencies {
   testImplementation "io.opentelemetry:opentelemetry-sdk-trace:${otelSdkVersion}"
   testImplementation "io.opentelemetry:opentelemetry-sdk-testing:${otelSdkVersion}"
   testImplementation "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:${otelSdkVersion}"
+  testImplementation "io.opentelemetry.javaagent:opentelemetry-testing-common:${otelJavaagentAlphaVersion}"
 }
 
 tasks.named("test", Test) {

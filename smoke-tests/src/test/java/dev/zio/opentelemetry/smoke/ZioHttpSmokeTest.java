@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.jar.JarFile;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -37,6 +38,11 @@ class ZioHttpSmokeTest {
   void manualAndAutomaticSpansShareOneTraceAcrossHttp() throws Exception {
     File agentJar = new File(System.getProperty("zio.smoketest.agent.jar"));
     assertTrue(agentJar.isFile(), "assembled agent JAR must exist");
+    String agentVersion;
+    try (JarFile jar = new JarFile(agentJar)) {
+      agentVersion = jar.getManifest().getMainAttributes().getValue("Implementation-Version");
+    }
+    assertNotNull(agentVersion, "agent manifest must include Implementation-Version");
 
     try (Network network = Network.newNetwork();
         GenericContainer<?> backend =
@@ -85,6 +91,7 @@ class ZioHttpSmokeTest {
       Span handler = findSpan(exports, "request.handler");
       Span manual = findSpan(exports, "zio.manual");
       Span outbound = findSpanById(exports, outboundSpanId);
+      assertEquals(1, countSpans(exports, "request.handler"));
       assertEquals(TRACE_ID, hex(handler.getTraceId().toByteArray()));
       assertEquals(PARENT_SPAN_ID, hex(handler.getParentSpanId().toByteArray()));
       assertEquals(
@@ -113,7 +120,7 @@ class ZioHttpSmokeTest {
               .anyMatch(
                   kv ->
                       kv.getKey().equals("telemetry.distro.version")
-                          && !kv.getValue().getStringValue().isEmpty()));
+                          && kv.getValue().getStringValue().equals(agentVersion)));
     }
   }
 
@@ -152,6 +159,15 @@ class ZioHttpSmokeTest {
         .flatMap(resource -> resource.getScopeSpansList().stream())
         .flatMap(scope -> scope.getSpansList().stream())
         .anyMatch(span -> span.getName().equals(name));
+  }
+
+  private static long countSpans(List<ExportTraceServiceRequest> exports, String name) {
+    return exports.stream()
+        .flatMap(export -> export.getResourceSpansList().stream())
+        .flatMap(resource -> resource.getScopeSpansList().stream())
+        .flatMap(scope -> scope.getSpansList().stream())
+        .filter(span -> span.getName().equals(name))
+        .count();
   }
 
   private static boolean hasSpanId(List<ExportTraceServiceRequest> exports, String spanId) {
