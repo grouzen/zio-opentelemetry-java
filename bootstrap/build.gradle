@@ -1,0 +1,8 @@
+plugins {
+  id "java"
+}
+
+dependencies {
+  compileOnly "io.opentelemetry:opentelemetry-api:${otelSdkVersion}"
+  compileOnly "io.opentelemetry:opentelemetry-context:${otelSdkVersion}"
+}

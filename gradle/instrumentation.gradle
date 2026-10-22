@@ -1,0 +1,18 @@
+dependencies {
+  compileOnly "io.opentelemetry.javaagent:opentelemetry-javaagent-extension-api:${otelJavaagentAlphaVersion}"
+  compileOnly "io.opentelemetry.javaagent:opentelemetry-javaagent-tooling:${otelJavaagentAlphaVersion}"
+  compileOnly "io.opentelemetry.javaagent:opentelemetry-javaagent-bootstrap:${otelJavaagentAlphaVersion}"
+  compileOnly "io.opentelemetry.javaagent.instrumentation:opentelemetry-javaagent-opentelemetry-api-1.0:${otelJavaagentAlphaVersion}"
+  compileOnly "io.opentelemetry:opentelemetry-api:${otelSdkVersion}"
+  compileOnly "io.opentelemetry:opentelemetry-context:${otelSdkVersion}"
+  compileOnly "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:${otelSdkVersion}"
+  compileOnly "net.bytebuddy:byte-buddy:1.17.8"
+  compileOnly "com.google.auto.service:auto-service-annotations:1.1.1"
+  annotationProcessor "com.google.auto.service:auto-service:1.1.1"
+}
+
+tasks.withType(Test).configureEach {
+  systemProperty "otel.javaagent.testing.fail-on-context-leak", "true"
+  systemProperty "otel.javaagent.experimental.thread-propagation-debugger.enabled", "true"
+  systemProperty "zio.trackFiberContext", "true"
+}

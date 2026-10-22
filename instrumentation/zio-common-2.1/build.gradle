@@ -1,0 +1,12 @@
+plugins {
+  id "java"
+}
+
+apply from: "$rootDir/gradle/instrumentation.gradle"
+
+dependencies {
+  implementation project(path: ':opentelemetry-api-shaded-for-instrumenting', configuration: 'shadowRuntimeElements')
+  implementation project(':bootstrap')
+  compileOnly "io.opentelemetry:opentelemetry-context:${otelSdkVersion}"
+  compileOnly "dev.zio:zio_${scalaVersion}:${zioVersion}"
+}

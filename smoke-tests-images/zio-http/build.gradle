@@ -1,0 +1,27 @@
+plugins {
+  id "scala"
+  id "com.google.cloud.tools.jib" version "3.5.4"
+}
+
+dependencies {
+  implementation scalaLibrary
+  implementation "dev.zio:zio_${scalaVersion}:${zioVersion}"
+  implementation "dev.zio:zio-http_${scalaVersion}:3.2.0"
+  implementation "io.opentelemetry:opentelemetry-api:${otelSdkVersion}"
+  implementation "dev.zio:zio-opentelemetry_${scalaVersion}:${zioTelemetryVersion}"
+  implementation "dev.zio:zio-opentelemetry-core_${scalaVersion}:${zioTelemetryVersion}"
+  implementation "dev.zio:zio-opentelemetry-agent_${scalaVersion}:${zioTelemetryVersion}"
+}
+
+tasks.named('compileScala', ScalaCompile) {
+  javaLauncher = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(17)
+  }
+}
+
+jib {
+  from.image = "eclipse-temurin:${testJavaVersion}-jre"
+  to.image = 'zio-opentelemetry-smoke:latest'
+  container.mainClass = 'example.Server'
+  container.ports = ['8080']
+}

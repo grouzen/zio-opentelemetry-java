@@ -1,0 +1,45 @@
+plugins {
+  id "com.diffplug.spotless" version "7.0.3"
+  id "com.gradleup.shadow" version "8.3.8" apply false
+}
+
+group = 'dev.zio'
+version = '2.28.1'
+
+ext {
+  otelSdkVersion = '1.62.0'
+  otelAgentVersion = '2.28.1'
+  otelJavaagentAlphaVersion = '2.28.1-alpha'
+  zioVersion = providers.gradleProperty('zioVersion').getOrElse('2.1.25')
+  zioTelemetryVersion = providers.gradleProperty('zioTelemetryVersion').getOrElse('0.0.0-bridge-c50f756')
+  scalaVersion = providers.gradleProperty('scalaVersion').getOrElse('2.13')
+  scalaFullVersion = providers.gradleProperty('scalaFullVersion').getOrElse(scalaVersion == '3' ? '3.3.8' : '2.13.18')
+  scalaLibrary = scalaVersion == '3' ? "org.scala-lang:scala3-library_3:${scalaFullVersion}" : "org.scala-lang:scala-library:${scalaFullVersion}"
+  testJavaVersion = providers.gradleProperty('testJavaVersion').getOrElse('17').toInteger()
+}
+
+if (testJavaVersion < 17) {
+  throw new GradleException('Java 17 is the minimum supported runtime; select -PtestJavaVersion=17 or later.')
+}
+
+subprojects {
+  plugins.withId("java") {
+    java {
+      toolchain {
+        languageVersion = JavaLanguageVersion.of(8)
+      }
+    }
+  }
+  plugins.withId("scala") {
+    tasks.withType(ScalaCompile).configureEach {
+      scalaCompileOptions.additionalParameters = ['-release:17']
+    }
+  }
+}
+
+spotless {
+  java {
+    target '**/src/**/*.java'
+    googleJavaFormat()
+  }
+}
