@@ -18,8 +18,8 @@ ext {
   testJavaVersion = providers.gradleProperty('testJavaVersion').getOrElse('17').toInteger()
 }
 
-if (zioVersion == '2.1.27' && testJavaVersion < 17) {
-  throw new GradleException('Published ZIO 2.1.27 contains Java 17 classes; select -PtestJavaVersion=17 or 21.')
+if (testJavaVersion < 17) {
+  throw new GradleException('Java 17 is the minimum supported runtime; select -PtestJavaVersion=17 or later.')
 }
 
 subprojects {
@@ -32,7 +32,7 @@ subprojects {
   }
   plugins.withId("scala") {
     tasks.withType(ScalaCompile).configureEach {
-      scalaCompileOptions.additionalParameters = ['-release:11']
+      scalaCompileOptions.additionalParameters = ['-release:17']
     }
   }
 }

@@ -51,7 +51,7 @@ The ZIO HTTP smoke test builds a container from the reproducible patched
 the manual span and automatic outgoing HTTP span share the expected trace and
 parent relationship. It also checks propagated `traceparent`, the manual span
 attribute, and distribution resource attributes. The compatibility workflow runs
-JDK 11/17/21, Scala 2.13/3, and ZIO 2.1.25/2.1.27, excluding ZIO 2.1.27 on
-JDK 11 because the published runtime requires Java 17. It uses one experimental
+JDK 17/21, Scala 2.13/3, and ZIO 2.1.25/2.1.27. Java 17 is the minimum
+supported runtime. The matrix uses one experimental
 zio-telemetry revision; broader library-version coverage and MDC log correlation
 remain follow-ups. See README.md for the exact fixture and local commands.

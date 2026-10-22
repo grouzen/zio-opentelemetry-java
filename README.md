@@ -1,8 +1,9 @@
 # ZIO Opentelemetry Java
 
-An experimental OpenTelemetry Java agent distribution with ZIO fiber context
-propagation and zio-telemetry integration. The shared `FiberRef` stores application
-contexts; the agent converts contexts at its storage boundary. See
+An experimental OpenTelemetry Java agent distribution for Java 17 and later,
+with ZIO fiber context propagation and zio-telemetry integration. The shared
+`FiberRef` stores application contexts; the agent converts contexts at its storage
+boundary. See
 [the bridge design](application-context-fiberref-bridge-plan.md).
 
 ## Build and test
@@ -31,18 +32,17 @@ context keys, baggage, runtime reentry, and the assembled agent in a ZIO HTTP ap
 
 ## Compatibility matrix
 
-CI runs the full build and HTTP smoke test in all ten runnable combinations:
+Java 17 is the minimum supported runtime. CI runs the full build and HTTP smoke
+test in all eight combinations:
 
 | Dimension | Values |
 | --- | --- |
-| Instrumentation test JVM and smoke target JVM | JDK 11, 17, 21 |
+| Instrumentation test JVM and smoke target JVM | JDK 17, 21 |
 | Scala compiler | 2.13.18, 3.3.8 |
 | ZIO runtime | 2.1.25, 2.1.27 |
 | zio-telemetry | Pinned experimental fixture above |
 
-ZIO 2.1.27 is excluded on JDK 11: its published Scala 2.13 and Scala 3 jars
-contain `MutableQueueFieldsPadding` compiled for Java 17 (class version 61).
-The build rejects that combination immediately. JDK 11 is covered with ZIO 2.1.25.
+The build rejects runtime selections below Java 17 for every ZIO version.
 
 These are explicit test targets, not a claim to support every version in between.
 The matrix tests one patched library revision until the agent integration has a
@@ -58,7 +58,7 @@ gradle clean build spotlessCheck --no-build-cache --no-daemon \
   -PscalaVersion=3 -PtestJavaVersion=21 -PzioVersion=2.1.27
 ```
 
-To run all lanes, install JDKs 8/11/17/21 and use
+To run all lanes, install JDKs 8/17/21 and use
 `bash scripts/test-compatibility.sh`. Logs and JUnit XML are retained per lane in
 `.gradle/compatibility/results`. CI uploads each lane's reports on success or
 failure. The smoke test checks the target JVM's reported Java version as well as

@@ -842,7 +842,7 @@ The ZIO HTTP smoke test is implemented in `smoke-tests-images/zio-http` and
 `smoke-tests`. It runs against the assembled agent and a fake OTLP backend.
 It covers context propagation, manual and automatic spans, span attributes,
 and distribution resource attributes. The compatibility workflow now covers
-JDK 11/17/21, Scala 2.13/3, and ZIO 2.1.25/2.1.27 with a pinned patched
+JDK 17/21, Scala 2.13/3, and ZIO 2.1.25/2.1.27 with a pinned patched
 zio-telemetry fixture. MDC log correlation remains a follow-up.
 
 ### 8.1 Smoke Test App
