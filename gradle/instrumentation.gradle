@@ -12,6 +12,7 @@ dependencies {
 }
 
 tasks.withType(Test).configureEach {
-  systemProperty "otel.javaagent.testing.context-leak-detection", "true"
+  systemProperty "otel.javaagent.testing.fail-on-context-leak", "true"
+  systemProperty "otel.javaagent.experimental.thread-propagation-debugger.enabled", "true"
   systemProperty "zio.trackFiberContext", "true"
 }

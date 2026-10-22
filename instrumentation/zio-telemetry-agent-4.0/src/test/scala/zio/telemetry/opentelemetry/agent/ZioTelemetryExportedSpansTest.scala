@@ -2,20 +2,26 @@ package zio.telemetry.opentelemetry.agent
 
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.api.trace.Span
-import io.opentelemetry.instrumentation.testing.junit.{AgentInstrumentationExtension, InstrumentationExtension}
+import dev.zio.agent.testing.ExportedContextContract
 import io.opentelemetry.sdk.trace.data.SpanData
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.extension.RegisterExtension
 import zio._
 import zio.telemetry.opentelemetry.{OpenTelemetry => ZioOpenTelemetry}
 import zio.telemetry.opentelemetry.core.{OpenTelemetry => CoreOpenTelemetry}
 import zio.telemetry.opentelemetry.core.trace.Tracer
 
 import scala.jdk.CollectionConverters._
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration.{Duration => ScalaDuration, SECONDS}
 
-class ZioTelemetryExportedSpansTest {
-  @RegisterExtension val testing: InstrumentationExtension = AgentInstrumentationExtension.create()
+class ZioTelemetryExportedSpansTest extends ExportedContextContract {
+  override protected def withTracing[A](effect: Spans => Task[A]): A =
+    runWithTelemetry { (_, tracer) =>
+      effect(new Spans {
+        override def apply[B](name: String)(body: Task[B]): Task[B] = tracer.span(name)(_ => body)
+      })
+    }
 
   @Test
   def javaZioAndForkedJavaSpansExportOneTree(): Unit = {
@@ -34,6 +40,40 @@ class ZioTelemetryExportedSpansTest {
     assertEquals(3, spans.size)
     assertParent(spans, "zio", "outer")
     assertParent(spans, "java-child", "zio")
+  }
+
+  @Test
+  def librarySpanPropagatesToLiftedFutureWithoutAnExplicitBoundary(): Unit = {
+    withSpan("outer") {
+      runWithTelemetry { (_, tracer) =>
+        tracer.span("zio") { _ =>
+          ZIO.fromFuture { implicit ec => Future(withSpan("future")(())) }
+        }
+      }
+    }
+    assertForest(Map("outer" -> None, "zio" -> Some("outer"), "future" -> Some("zio")))
+  }
+
+  @Test
+  def libraryRuntimeToFutureAndCallbackReentryPreserveParents(): Unit = {
+    withSpan("outer") {
+      runWithTelemetry { (_, tracer) =>
+        tracer.span("zio") { _ =>
+          ZIO.fromFuture { implicit ec =>
+            Future {
+              withSpan("callback") {
+                val future = Unsafe.unsafe { implicit unsafe =>
+                  Runtime.default.unsafe.runToFuture(tracer.span("reentered-zio")(_ => ZIO.unit))
+                }
+                Await.result(future, ScalaDuration(10, SECONDS))
+              }
+            }
+          }
+        }
+      }
+    }
+    assertForest(Map("outer" -> None, "zio" -> Some("outer"),
+      "callback" -> Some("zio"), "reentered-zio" -> Some("callback")))
   }
 
   private def javaSpan(name: String): ZIO[Any, Throwable, Unit] =

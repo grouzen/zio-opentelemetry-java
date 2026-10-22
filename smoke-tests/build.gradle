@@ -17,11 +17,17 @@ dependencies {
 
 tasks.named('test', Test) {
   useJUnitPlatform()
+  javaLauncher = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(17)
+  }
   def agentJar = project(':agent').tasks.named('shadowJar')
   def smokeImage = project(':smoke-tests-images:zio-http').tasks.named('jibDockerBuild')
   dependsOn(agentJar, smokeImage)
   inputs.file(agentJar.flatMap { it.archiveFile })
   doFirst {
     systemProperty 'zio.smoketest.agent.jar', agentJar.get().archiveFile.get().asFile.absolutePath
+    systemProperty 'zio.smoketest.java.version', testJavaVersion
+    systemProperty 'zio.smoketest.scala.version', scalaVersion
+    systemProperty 'zio.smoketest.zio.version', zioVersion
   }
 }

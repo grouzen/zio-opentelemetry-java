@@ -2,19 +2,21 @@ package io.opentelemetry.javaagent.instrumentation.zio.v2_1
 
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.api.trace.{Span, SpanId}
-import io.opentelemetry.instrumentation.testing.junit.{AgentInstrumentationExtension, InstrumentationExtension}
+import dev.zio.agent.testing.ExportedContextContract
 import io.opentelemetry.sdk.trace.data.SpanData
 import org.junit.jupiter.api.Assertions.{assertEquals, assertTrue}
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.extension.RegisterExtension
 import zio._
 
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.{Duration => ScalaDuration, SECONDS}
 import scala.jdk.CollectionConverters._
 
-class ZioExportedSpansTest {
-  @RegisterExtension val testing: InstrumentationExtension = AgentInstrumentationExtension.create()
+class ZioExportedSpansTest extends ExportedContextContract {
+  override protected def withTracing[A](effect: Spans => Task[A]): A =
+    runZIO(effect(new Spans {
+      override def apply[B](name: String)(body: Task[B]): Task[B] = scopedSpan(name)(body)
+    }))
 
   @Test
   def outerZioAndFutureSpansHaveExactParents(): Unit = {
@@ -38,10 +40,10 @@ class ZioExportedSpansTest {
   def forkedChildAndIndependentFibersExportSeparateTrees(): Unit = {
     runZIO {
       for {
-        first <- (scopedSpan("first-root", root = true) {
+        first <- (scopedSpan("first-root") {
           scopedSpan("first-child")(ZIO.unit).fork.flatMap(_.join)
         }).fork
-        second <- scopedSpan("second-root", root = true)(ZIO.unit).fork
+        second <- scopedSpan("second-root")(ZIO.unit).fork
         _ <- first.join
         _ <- second.join
       } yield ()
@@ -91,10 +93,9 @@ class ZioExportedSpansTest {
   private def span(spans: List[SpanData], name: String): SpanData =
     spans.find(_.getName == name).getOrElse(throw new AssertionError(s"Missing span: $name"))
 
-  private def scopedSpan[A](name: String, root: Boolean = false)(effect: ZIO[Any, Throwable, A]): ZIO[Any, Throwable, A] =
+  private def scopedSpan[A](name: String)(effect: ZIO[Any, Throwable, A]): ZIO[Any, Throwable, A] =
     ZIO.acquireReleaseWith(ZIO.attempt {
       val builder = GlobalOpenTelemetry.getTracer("zio-export-test").spanBuilder(name)
-      if (root) builder.setNoParent()
       val span = builder.startSpan()
       (span, span.makeCurrent())
     }) { case (span, scope) =>

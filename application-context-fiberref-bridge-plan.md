@@ -43,10 +43,15 @@ the earlier failure modes, but its agent-only slot rule no longer applies.
 
 Steps 1 through 4 are implemented in this worktree. The strengthened tests
 cover library-to-Java and Java-to-library visibility without explicit boundary
-helpers. The core and zio-telemetry suites pass (10 and 18 tests respectively).
-The ZIO HTTP smoke test builds a container from the locally published
-`zio-telemetry` snapshot, attaches the distributable agent, and confirms that
+helpers. Both suites also run the same exported-span contract for scheduling,
+interruption, external ZIO executors, race cleanup, and timeout cancellation.
+Leak failure configuration is verified by an intentional leak probe.
+The ZIO HTTP smoke test builds a container from the reproducible patched
+`zio-telemetry` fixture, attaches the distributable agent, and confirms that
 the manual span and automatic outgoing HTTP span share the expected trace and
 parent relationship. It also checks propagated `traceparent`, the manual span
-attribute, and distribution resource attributes. Compatibility across other
-ZIO and zio-telemetry versions, and MDC log correlation, remain to be checked.
+attribute, and distribution resource attributes. The compatibility workflow runs
+JDK 11/17/21, Scala 2.13/3, and ZIO 2.1.25/2.1.27, excluding ZIO 2.1.27 on
+JDK 11 because the published runtime requires Java 17. It uses one experimental
+zio-telemetry revision; broader library-version coverage and MDC log correlation
+remain follow-ups. See README.md for the exact fixture and local commands.

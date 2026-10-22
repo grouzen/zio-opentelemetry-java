@@ -1,0 +1,70 @@
+name: ZIO compatibility
+
+on:
+  pull_request:
+  push:
+    branches: [main, init-zio-opentelemetry-java]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [11, 17, 21]
+        scala: ['2.13', '3']
+        zio: ['2.1.25', '2.1.27']
+        # Both published 2.1.27 artifacts contain Java 17 MutableQueueFieldsPadding bytecode.
+        exclude:
+          - java: 11
+            zio: '2.1.27'
+    name: JDK ${{ matrix.java }} / Scala ${{ matrix.scala }} / ZIO ${{ matrix.zio }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            8
+            11
+            21
+            17
+      - uses: sbt/setup-sbt@v1
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: Register the installed JDKs with Gradle
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.gradle"
+          printf '%s\n' 'org.gradle.java.installations.fromEnv=JAVA_HOME_8_X64,JAVA_HOME_11_X64,JAVA_HOME_17_X64,JAVA_HOME_21_X64' >> "$HOME/.gradle/gradle.properties"
+      - name: Build the pinned zio-telemetry fixture
+        shell: bash
+        run: |
+          if [[ '${{ matrix.scala }}' == '3' ]]; then
+            bash scripts/prepare-zio-telemetry.sh 3.3.8
+          else
+            bash scripts/prepare-zio-telemetry.sh 2.13.18
+          fi
+      - name: Run instrumentation suites, packaged agent smoke, and formatting
+        run: >-
+          gradle clean build spotlessCheck --no-build-cache --no-daemon
+          -PscalaVersion=${{ matrix.scala }}
+          -PtestJavaVersion=${{ matrix.java }}
+          -PzioVersion=${{ matrix.zio }}
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-jdk${{ matrix.java }}-scala${{ matrix.scala }}-zio${{ matrix.zio }}
+          path: |
+            instrumentation/*/build/reports/tests/
+            smoke-tests/build/reports/tests/
+            instrumentation/*/build/test-results/
+            smoke-tests/build/test-results/

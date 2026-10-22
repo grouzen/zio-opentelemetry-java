@@ -10,10 +10,16 @@ ext {
   otelSdkVersion = '1.62.0'
   otelAgentVersion = '2.28.1'
   otelJavaagentAlphaVersion = '2.28.1-alpha'
-  zioVersion = '2.1.25'
-  zioTelemetryVersion = '4.0.0-RC11+5-bb9e4f8a-SNAPSHOT'
-  scalaVersion = '2.13'
-  scalaFullVersion = '2.13.16'
+  zioVersion = providers.gradleProperty('zioVersion').getOrElse('2.1.25')
+  zioTelemetryVersion = providers.gradleProperty('zioTelemetryVersion').getOrElse('0.0.0-bridge-c50f756')
+  scalaVersion = providers.gradleProperty('scalaVersion').getOrElse('2.13')
+  scalaFullVersion = providers.gradleProperty('scalaFullVersion').getOrElse(scalaVersion == '3' ? '3.3.8' : '2.13.18')
+  scalaLibrary = scalaVersion == '3' ? "org.scala-lang:scala3-library_3:${scalaFullVersion}" : "org.scala-lang:scala-library:${scalaFullVersion}"
+  testJavaVersion = providers.gradleProperty('testJavaVersion').getOrElse('17').toInteger()
+}
+
+if (zioVersion == '2.1.27' && testJavaVersion < 17) {
+  throw new GradleException('Published ZIO 2.1.27 contains Java 17 classes; select -PtestJavaVersion=17 or 21.')
 }
 
 subprojects {
@@ -22,6 +28,11 @@ subprojects {
       toolchain {
         languageVersion = JavaLanguageVersion.of(8)
       }
+    }
+  }
+  plugins.withId("scala") {
+    tasks.withType(ScalaCompile).configureEach {
+      scalaCompileOptions.additionalParameters = ['-release:11']
     }
   }
 }

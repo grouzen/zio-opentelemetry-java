@@ -5,13 +5,15 @@ plugins {
 
 apply from: "$rootDir/gradle/instrumentation.gradle"
 
+sourceSets.test.scala.srcDir "$rootDir/testing/context-contract/src/test/scala"
+
 dependencies {
   implementation project(path: ':opentelemetry-api-shaded-for-instrumenting', configuration: 'shadowRuntimeElements')
   implementation project(':instrumentation:zio-common-2.1')
-  compileOnly files("${System.properties['user.home']}/.ivy2/local/dev.zio/zio-opentelemetry-agent_${scalaVersion}/${zioTelemetryVersion}/jars/zio-opentelemetry-agent_${scalaVersion}.jar")
+  compileOnly "dev.zio:zio-opentelemetry-agent_${scalaVersion}:${zioTelemetryVersion}"
   compileOnly "dev.zio:zio_${scalaVersion}:${zioVersion}"
 
-  testImplementation "org.scala-lang:scala-library:${scalaFullVersion}"
+  testImplementation scalaLibrary
   testImplementation "dev.zio:zio_${scalaVersion}:${zioVersion}"
   testImplementation "org.junit.jupiter:junit-jupiter-api:5.11.4"
   testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.11.4"
@@ -19,9 +21,9 @@ dependencies {
   testImplementation "io.opentelemetry:opentelemetry-api:${otelSdkVersion}"
   testImplementation "io.opentelemetry:opentelemetry-context:${otelSdkVersion}"
   testImplementation "io.opentelemetry.javaagent:opentelemetry-testing-common:${otelJavaagentAlphaVersion}"
-  testImplementation files("${System.properties['user.home']}/.ivy2/local/dev.zio/zio-opentelemetry_${scalaVersion}/${zioTelemetryVersion}/jars/zio-opentelemetry_${scalaVersion}.jar")
-  testImplementation files("${System.properties['user.home']}/.ivy2/local/dev.zio/zio-opentelemetry-core_${scalaVersion}/${zioTelemetryVersion}/jars/zio-opentelemetry-core_${scalaVersion}.jar")
-  testImplementation files("${System.properties['user.home']}/.ivy2/local/dev.zio/zio-opentelemetry-agent_${scalaVersion}/${zioTelemetryVersion}/jars/zio-opentelemetry-agent_${scalaVersion}.jar")
+  testImplementation "dev.zio:zio-opentelemetry_${scalaVersion}:${zioTelemetryVersion}"
+  testImplementation "dev.zio:zio-opentelemetry-core_${scalaVersion}:${zioTelemetryVersion}"
+  testImplementation "dev.zio:zio-opentelemetry-agent_${scalaVersion}:${zioTelemetryVersion}"
 }
 
 tasks.named("test", Test) {
@@ -32,12 +34,11 @@ tasks.named("test", Test) {
       sourceSets.main.output -
       project(':instrumentation:zio-common-2.1').sourceSets.main.output
   javaLauncher = javaToolchains.launcherFor {
-    languageVersion = JavaLanguageVersion.of(17)
+    languageVersion = JavaLanguageVersion.of(testJavaVersion)
   }
   jvmArgs "-javaagent:${project(':testing:agent-for-testing').tasks.named('shadowJar').get().archiveFile.get().asFile.absolutePath}"
   jvmArgs "-Dzio.trackFiberContext=true"
   jvmArgs "-Dotel.javaagent.debug=true"
-  jvmArgs "-Dotel.javaagent.testing.context-leak-detection=true"
 }
 
 tasks.named("compileTestScala", ScalaCompile) {

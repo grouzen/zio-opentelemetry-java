@@ -81,6 +81,8 @@ class ZioHttpSmokeTest {
         assertEquals(200, response.code());
         assertEquals("welcome", response.body().string());
         assertEquals(TRACE_ID, response.header("x-current-trace-id"));
+        assertEquals(
+            System.getProperty("zio.smoketest.java.version"), response.header("x-java-version"));
         String outboundTraceparent = response.header("traceparent");
         assertNotNull(outboundTraceparent, "outgoing HTTP call must inject traceparent");
         assertEquals(TRACE_ID, outboundTraceparent.split("-")[1]);

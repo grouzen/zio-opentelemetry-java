@@ -9,17 +9,6 @@ dependencyResolutionManagement {
   repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
   repositories {
     mavenLocal()
-    ivy {
-      url = file("${System.properties['user.home']}/.ivy2/local")
-      patternLayout {
-        artifact "[organisation]/[module]/[revision]/[type]s/[artifact](-[classifier]).[ext]"
-        ivy "[organisation]/[module]/[revision]/ivys/ivy.xml"
-      }
-      metadataSources {
-        ivyDescriptor()
-        artifact()
-      }
-    }
     mavenCentral()
   }
 }

@@ -503,7 +503,9 @@ class ZioTelemetryInstrumentationTest {
       runWithTelemetry { (openTelemetry, _) =>
         ZIO.succeed {
           ZioAgentContext.isAgentAttached &&
-          ZioAgentContext.getAgentFiberRef().exists(_ eq openTelemetry.unsafe.getCtxStorage.ref)
+          ZioAgentContext.getAgentFiberRef().exists { agentRef =>
+            openTelemetry.unsafe.getCtxStorage.fiberRefOption.exists(_ eq agentRef)
+          }
         }
       }
 

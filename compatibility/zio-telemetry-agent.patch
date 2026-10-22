@@ -1,0 +1,266 @@
+diff --git a/build.sbt b/build.sbt
+index be271a4..aa44c44 100644
+--- a/build.sbt
++++ b/build.sbt
+@@ -143,6 +143,7 @@ lazy val root =
+     .aggregate(
+       opentelemetry,
+       opentelemetryCore,
++      opentelemetryAgent,
+       opentelemetryTestkit,
+       opentelemetryZioLogging,
+       opentelemetryAwsXrayPropagator,
+@@ -165,7 +166,20 @@ lazy val opentelemetry: Project =
+     .settings(libraryDependencies ++= Dependencies.opentelemetry)
+     .settings(mimaSettings(failOnProblem = true))
+     .settings(unusedCompileDependenciesFilter -= moduleFilter("org.scala-lang.modules", "scala-collection-compat"))
+-    .dependsOn(opentelemetryCore, opentelemetryTestkit % Test)
++    .dependsOn(opentelemetryCore, opentelemetryAgent, opentelemetryTestkit % Test)
++
++lazy val opentelemetryAgent =
++  project
++    .in(file("modules/opentelemetry/agent"))
++    .settings(enableZIO())
++    .settings(
++      stdModuleSettings(
++        name = Some("zio-opentelemetry-agent"),
++        packageName = Some("zio.telemetry.opentelemetry.agent")
++      )
++    )
++    .settings(libraryDependencies ++= Dependencies.opentelemetryAgent)
++    .dependsOn(opentelemetryCore)
+ 
+ lazy val opentelemetryCore =
+   project
+diff --git a/modules/opentelemetry/core/src/main/scala/zio/telemetry/opentelemetry/core/context/internal/ContextStorage.scala b/modules/opentelemetry/core/src/main/scala/zio/telemetry/opentelemetry/core/context/internal/ContextStorage.scala
+index 0d84992..f7304cd 100644
+--- a/modules/opentelemetry/core/src/main/scala/zio/telemetry/opentelemetry/core/context/internal/ContextStorage.scala
++++ b/modules/opentelemetry/core/src/main/scala/zio/telemetry/opentelemetry/core/context/internal/ContextStorage.scala
+@@ -3,7 +3,7 @@ package zio.telemetry.opentelemetry.core.context.internal
+ import io.opentelemetry.context.Context
+ import zio._
+ 
+-sealed trait ContextStorage {
++trait ContextStorage {
+ 
+   def get(implicit trace: Trace): UIO[Context]
+ 
+@@ -11,6 +11,8 @@ sealed trait ContextStorage {
+ 
+   def locallyScoped(ctx: Context)(implicit trace: Trace): ZIO[Scope, Nothing, Unit]
+ 
++  def fiberRefOption: Option[FiberRef[Context]] = None
++
+ }
+ 
+ private[opentelemetry] object ContextStorage {
+@@ -33,6 +35,9 @@ private[opentelemetry] object ContextStorage {
+     override def locallyScoped(context: Context)(implicit trace: Trace): ZIO[Scope, Nothing, Unit] =
+       ref.locallyScoped(context)
+ 
++    override def fiberRefOption: Option[FiberRef[Context]] =
++      Some(ref)
++
+   }
+ 
+   /**
+diff --git a/modules/opentelemetry/core/src/main/scala/zio/telemetry/opentelemetry/core/logs/Logger.scala b/modules/opentelemetry/core/src/main/scala/zio/telemetry/opentelemetry/core/logs/Logger.scala
+index e55766c..4e1e3f2 100644
+--- a/modules/opentelemetry/core/src/main/scala/zio/telemetry/opentelemetry/core/logs/Logger.scala
++++ b/modules/opentelemetry/core/src/main/scala/zio/telemetry/opentelemetry/core/logs/Logger.scala
+@@ -47,10 +47,10 @@ private[opentelemetry] object Logger {
+         builder.setSeverity(severityMapping(logLevel))
+         annotations.foreach { case (k, v) => builder.setAttribute(AttributeKey.stringKey(k), v) }
+ 
+-        ctxStorage match {
+-          case cs: ContextStorage.ZIOFiberRef             =>
+-            context.get(cs.ref).foreach(builder.setContext)
+-          case _: ContextStorage.JavaOtelThreadLocal.type =>
++        ctxStorage.fiberRefOption match {
++          case Some(fiberRef) =>
++            context.get(fiberRef).foreach(builder.setContext)
++          case None           =>
+             builder.setContext(Context.current())
+         }
+ 
+diff --git a/modules/opentelemetry/main/src/main/scala/zio/telemetry/opentelemetry/OpenTelemetry.scala b/modules/opentelemetry/main/src/main/scala/zio/telemetry/opentelemetry/OpenTelemetry.scala
+index 2ac8311..6d07ffe 100644
+--- a/modules/opentelemetry/main/src/main/scala/zio/telemetry/opentelemetry/OpenTelemetry.scala
++++ b/modules/opentelemetry/main/src/main/scala/zio/telemetry/opentelemetry/OpenTelemetry.scala
+@@ -67,6 +67,9 @@ object OpenTelemetry {
+       } yield core.OpenTelemetry.make(ctxStorage, underlying, ContextPropagator.noop, logAnnotated)
+     }
+ 
++  def agent(logAnnotated: Boolean = false)(implicit trace: Trace): TaskLayer[core.OpenTelemetry] =
++    zio.telemetry.opentelemetry.agent.OpenTelemetry.global(logAnnotated)
++
+   /**
+    * Use when you need to instrument spans manually.
+    *
+diff --git a/modules/opentelemetry/zio-logging/src/main/scala/zio/telemetry/opentelemetry/zio/logging/LogFormats.scala b/modules/opentelemetry/zio-logging/src/main/scala/zio/telemetry/opentelemetry/zio/logging/LogFormats.scala
+index 08e3d7b..5eb6a23 100644
+--- a/modules/opentelemetry/zio-logging/src/main/scala/zio/telemetry/opentelemetry/zio/logging/LogFormats.scala
++++ b/modules/opentelemetry/zio-logging/src/main/scala/zio/telemetry/opentelemetry/zio/logging/LogFormats.scala
+@@ -44,9 +44,9 @@ private[opentelemetry] object LogFormats {
+       }
+ 
+       private def getSpanContext(ctxStorage: ContextStorage, fiberRefs: FiberRefs): Option[SpanContext] = {
+-        val maybeOtelContext = ctxStorage match {
+-          case cs: ContextStorage.ZIOFiberRef     => fiberRefs.get(cs.ref)
+-          case ContextStorage.JavaOtelThreadLocal => Some(Context.current())
++        val maybeOtelContext = ctxStorage.fiberRefOption match {
++          case Some(fiberRef) => fiberRefs.get(fiberRef)
++          case None           => Some(Context.current())
+         }
+ 
+         maybeOtelContext
+diff --git a/project/Dependencies.scala b/project/Dependencies.scala
+index 0411608..59e1dd9 100644
+--- a/project/Dependencies.scala
++++ b/project/Dependencies.scala
+@@ -80,6 +80,13 @@ object Dependencies {
+     Orgs.zio          %% "zio-logging"               % Versions.zioLogging
+   )
+ 
++  lazy val opentelemetryAgent = zio ++ Seq(
++    Orgs.opentelemetry % "opentelemetry-api"         % Versions.opentelemetry,
++    Orgs.opentelemetry % "opentelemetry-context"     % Versions.opentelemetry,
++    Orgs.opentelemetry % "opentelemetry-sdk"         % Versions.opentelemetry % Test,
++    Orgs.opentelemetry % "opentelemetry-sdk-testing" % Versions.opentelemetry % Test
++  )
++
+   lazy val opentelemetryAwsXrayPropagator = Seq(
+     Orgs.opentelemetry        % "opentelemetry-context"             % Versions.opentelemetry,
+     Orgs.opentelemetryContrib % "opentelemetry-aws-xray-propagator" % Versions.opentelemetryContrib
+diff --git a/modules/opentelemetry/agent/src/main/scala/zio/telemetry/opentelemetry/agent/ContextBridge.scala b/modules/opentelemetry/agent/src/main/scala/zio/telemetry/opentelemetry/agent/ContextBridge.scala
+new file mode 100644
+--- /dev/null
++++ b/modules/opentelemetry/agent/src/main/scala/zio/telemetry/opentelemetry/agent/ContextBridge.scala
+@@ -0,0 +1,46 @@
++package zio.telemetry.opentelemetry.agent
++
++import io.opentelemetry.context.Context
++import zio._
++import zio.internal.FiberRuntime
++
++object ContextBridge {
++
++  def installSupervisor(fiberRef: FiberRef[Context]): ZLayer[Any, Nothing, Unit] = {
++    val link: Context => Unit = { ctx =>
++      ctx.makeCurrent()
++      ()
++    }
++
++    val supervisor = new Supervisor[Unit] {
++      override def value(implicit trace: Trace): UIO[Unit] = ZIO.unit
++
++      override def onStart[R, E, A](
++        environment: ZEnvironment[R],
++        effect: ZIO[R, E, A],
++        parent: Option[Fiber.Runtime[Any, Any]],
++        fiber: Fiber.Runtime[E, A]
++      )(implicit unsafe: Unsafe): Unit = ()
++
++      override def onEnd[R, E, A](
++        value: Exit[E, A],
++        fiber: Fiber.Runtime[E, A]
++      )(implicit unsafe: Unsafe): Unit = ()
++
++      override def onSuspend[E, A](
++        fiber: Fiber.Runtime[E, A]
++      )(implicit unsafe: Unsafe): Unit =
++        link(Context.root())
++
++      override def onResume[E, A](
++        fiber: Fiber.Runtime[E, A]
++      )(implicit unsafe: Unsafe): Unit = {
++        val ctx = fiber.asInstanceOf[FiberRuntime[E, A]].getFiberRef(fiberRef)
++        link(ctx)
++      }
++    }
++
++    Runtime.addSupervisor(supervisor)
++  }
++
++}
+diff --git a/modules/opentelemetry/agent/src/main/scala/zio/telemetry/opentelemetry/agent/FiberRefContextStorage.scala b/modules/opentelemetry/agent/src/main/scala/zio/telemetry/opentelemetry/agent/FiberRefContextStorage.scala
+new file mode 100644
+--- /dev/null
++++ b/modules/opentelemetry/agent/src/main/scala/zio/telemetry/opentelemetry/agent/FiberRefContextStorage.scala
+@@ -0,0 +1,25 @@
++package zio.telemetry.opentelemetry.agent
++
++import io.opentelemetry.context.Context
++import zio._
++import zio.telemetry.opentelemetry.core.context.internal.ContextStorage
++
++final class FiberRefContextStorage(
++  private[opentelemetry] val ref: FiberRef[Context]
++) extends ContextStorage {
++
++  override def get(implicit trace: Trace): UIO[Context] =
++    ref.get
++
++  override def locally[R, E, A](ctx: Context)(zio: => ZIO[R, E, A])(implicit
++    trace: Trace
++  ): ZIO[R, E, A] =
++    ref.locally(ctx)(zio)
++
++  override def locallyScoped(ctx: Context)(implicit trace: Trace): ZIO[Scope, Nothing, Unit] =
++    ref.locallyScoped(ctx)
++
++  override def fiberRefOption: Option[FiberRef[Context]] =
++    Some(ref)
++
++}
+diff --git a/modules/opentelemetry/agent/src/main/scala/zio/telemetry/opentelemetry/agent/OpenTelemetry.scala b/modules/opentelemetry/agent/src/main/scala/zio/telemetry/opentelemetry/agent/OpenTelemetry.scala
+new file mode 100644
+--- /dev/null
++++ b/modules/opentelemetry/agent/src/main/scala/zio/telemetry/opentelemetry/agent/OpenTelemetry.scala
+@@ -0,0 +1,29 @@
++package zio.telemetry.opentelemetry.agent
++
++import zio._
++import zio.telemetry.opentelemetry.core
++import zio.telemetry.opentelemetry.core.context.ContextPropagator
++import zio.telemetry.opentelemetry.core.context.internal.ContextStorage
++
++object OpenTelemetry {
++
++  def global(logAnnotated: Boolean = false)(implicit trace: Trace): TaskLayer[core.OpenTelemetry] =
++    ZLayer.scoped {
++      for {
++        underlying <- ZIO.attempt(io.opentelemetry.api.GlobalOpenTelemetry.get())
++        propagator  = ContextPropagator.fromJava(underlying.getPropagators)
++        storage    <- createStorage
++      } yield core.OpenTelemetry.make(storage, underlying, propagator, logAnnotated)
++    }
++
++  private def createStorage(implicit trace: Trace): URIO[Scope, ContextStorage] =
++    ZioAgentContext.getAgentFiberRef() match {
++      case Some(fiberRef) =>
++        ZIO.logInfo("zio-opentelemetry-agent: agent-provided FiberRef detected") *>
++          ZIO.succeed(new FiberRefContextStorage(fiberRef))
++      case None           =>
++        ZIO.logWarning("zio-opentelemetry-agent: agent not detected, falling back to JavaOtelThreadLocal") *>
++          ZIO.succeed(ContextStorage.JavaOtelThreadLocal)
++    }
++
++}
+diff --git a/modules/opentelemetry/agent/src/main/scala/zio/telemetry/opentelemetry/agent/ZioAgentContext.scala b/modules/opentelemetry/agent/src/main/scala/zio/telemetry/opentelemetry/agent/ZioAgentContext.scala
+new file mode 100644
+--- /dev/null
++++ b/modules/opentelemetry/agent/src/main/scala/zio/telemetry/opentelemetry/agent/ZioAgentContext.scala
+@@ -0,0 +1,12 @@
++package zio.telemetry.opentelemetry.agent
++
++import io.opentelemetry.context.Context
++import zio._
++
++object ZioAgentContext {
++
++  private[agent] def getAgentFiberRef(): Option[FiberRef[Context]] = None
++
++  def isAgentAttached: Boolean = getAgentFiberRef().isDefined
++
++}

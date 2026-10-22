@@ -54,6 +54,7 @@ object Server extends ZIOAppDefault {
               current <- ZIO.succeed(Span.current().getSpanContext)
             } yield Response.text("welcome").addHeader(Header.Custom("traceparent", echoedTraceparent))
               .addHeader(Header.Custom("x-current-trace-id", current.getTraceId))
+              .addHeader(Header.Custom("x-java-version", java.lang.System.getProperty("java.specification.version")))
           }
         }.orDie
       },

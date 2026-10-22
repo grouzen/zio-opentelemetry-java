@@ -132,7 +132,7 @@ Package relocation rules for the agent assembly:
 Shared build logic for instrumentation modules:
 - Applies `muzzle-generation` and `muzzle-check` plugins for ZIO version compatibility validation
 - Configures test JVM with `-javaagent:agent-for-testing.jar`
-- Enables context leak detection: `otel.javaagent.testing.context-leak-detection=true`
+- Enables context leak failures: `otel.javaagent.testing.fail-on-context-leak=true`
 - Sets `zio.trackFiberContext=true` system property for tests
 
 **Reference**: `otel4s-opentelemetry-java/gradle/instrumentation.gradle`
@@ -791,7 +791,7 @@ Tests using raw OTel Java API (`Span`, `tracer.spanBuilder`) with the agent atta
 
 **Test infrastructure**:
 - JVM args: `-javaagent:agent-for-testing.jar -Dzio.trackFiberContext=true -Dotel.javaagent.debug=true`
-- Context leak detection: `otel.javaagent.testing.context-leak-detection=true`
+- Context leak failures: `otel.javaagent.testing.fail-on-context-leak=true`
 - Uses `InMemorySpanExporter` to assert span parent-child relationships
 
 ### 7.2 zio-telemetry Integration Tests
@@ -820,7 +820,7 @@ test {
   jvmArgs "-javaagent:${project(':testing:agent-for-testing').shadowJar.archiveFile.get()}"
   jvmArgs "-Dzio.trackFiberContext=true"
   jvmArgs "-Dotel.javaagent.debug=true"
-  jvmArgs "-Dotel.javaagent.testing.context-leak-detection=true"
+  jvmArgs "-Dotel.javaagent.testing.fail-on-context-leak=true"
 }
 
 dependencies {
@@ -841,8 +841,9 @@ Run: `./gradlew test`
 The ZIO HTTP smoke test is implemented in `smoke-tests-images/zio-http` and
 `smoke-tests`. It runs against the assembled agent and a fake OTLP backend.
 It covers context propagation, manual and automatic spans, span attributes,
-and distribution resource attributes. MDC log correlation and the version
-matrix in Step 8.3 are still separate follow-ups.
+and distribution resource attributes. The compatibility workflow now covers
+JDK 11/17/21, Scala 2.13/3, and ZIO 2.1.25/2.1.27 with a pinned patched
+zio-telemetry fixture. MDC log correlation remains a follow-up.
 
 ### 8.1 Smoke Test App
 
@@ -867,6 +868,11 @@ Uses Testcontainers:
 **Reference**: `otel4s-opentelemetry-java/smoke-tests/.../Http4sSmokeTest.java`
 
 ### 8.3 Version Matrix
+
+Implemented runtime matrix: `.github/workflows/compatibility.yml` and
+`scripts/test-compatibility.sh`. See README.md for fixture preparation and
+supported test targets. The original Muzzle configuration sketch below remains
+unimplemented; it does not describe the runtime matrix.
 
 **File**: `smoke-tests-images/zio-http/smoke-test-versions.gradle`
 
